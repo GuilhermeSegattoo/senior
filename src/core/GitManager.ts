@@ -64,20 +64,35 @@ export class GitManager {
   // REPOSITÓRIO
   // =========================================================
 
+  /*
+   * IMPORTANTE: "--is-inside-work-tree" retorna true para
+   * QUALQUER diretório dentro da árvore de um repositório
+   * ancestral — inclusive quando o próprio SENIOR roda de dentro
+   * de um repositório git (ex.: "projects/" nested no repo do
+   * SENIOR). Isso fazia projectPath ser tratado como já
+   * inicializado e todos os comandos git da tarefa acabavam
+   * executando no repositório ERRADO (o ancestral).
+   *
+   * Por isso comparamos o toplevel real com projectPath: só é
+   * "repositório" para nós se projectPath FOR a raiz do repo.
+   */
   async isRepository(
     projectPath: string
   ): Promise<boolean> {
     try {
-      const result =
+      const topLevel =
         await this.git(
           projectPath,
           [
             "rev-parse",
-            "--is-inside-work-tree",
+            "--show-toplevel",
           ]
         );
 
-      return result === "true";
+      return (
+        path.resolve(topLevel) ===
+        path.resolve(projectPath)
+      );
     } catch {
       return false;
     }
@@ -434,6 +449,30 @@ export class GitManager {
       [
         "diff",
         "HEAD",
+        "--",
+      ]
+    );
+  }
+
+  /*
+   * Diff real produzido por uma tarefa: da base analisada
+   * até o headCommit final. Usado pelo avaliador semântico
+   * de critérios de aceite (Validation Loop).
+   */
+  async getCommitDiff(
+    workspacePath: string,
+    fromCommit: string,
+    toCommit: string
+  ): Promise<string> {
+    if (fromCommit === toCommit) {
+      return "";
+    }
+
+    return this.git(
+      workspacePath,
+      [
+        "diff",
+        `${fromCommit}..${toCommit}`,
         "--",
       ]
     );

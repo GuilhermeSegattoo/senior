@@ -96,3 +96,30 @@ export interface TaskValidation {
 
   blockedReason?: string;
 }
+
+/*
+ * Validação de nível de plano (seção 11 do SENIOR_MASTER_PLAN.md).
+ *
+ * Mesmo com todas as tarefas individualmente VALIDATED, o objetivo
+ * original do usuário precisa ser confirmado separadamente.
+ */
+export interface PlanGateWarning {
+  taskId: string;
+
+  message: string;
+}
+
+export interface PlanValidation {
+  status: Extract<
+    ValidationStatus,
+    "PASSED" | "FAILED"
+  >;
+
+  objective: string;
+
+  reasoning: string;
+
+  gateWarnings: PlanGateWarning[];
+
+  validatedAt: string;
+}

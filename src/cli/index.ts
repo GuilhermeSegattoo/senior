@@ -15,8 +15,12 @@ const nomesStatus: Record<string, string> = {
   WAITING: "AGUARDANDO",
   READY: "PRONTA",
   RUNNING: "EM EXECUÇÃO",
+  VALIDATING: "VALIDANDO",
+  CORRECTION_REQUIRED: "AGUARDANDO CORREÇÃO",
+  VALIDATED: "VALIDADA",
   DONE: "CONCLUÍDA",
   FAILED: "FALHOU",
+  BLOCKED: "BLOQUEADA (PRECISA DE HUMANO)",
 };
 
 async function main() {
@@ -424,6 +428,36 @@ async function main() {
         );
       }
 
+      if (task.validation) {
+        const attempts =
+          task.validation.attempts
+            .length;
+
+        console.log(
+          `  Validação: ${task.validation.status} (tentativa ${attempts}/${task.validation.maxAttempts})`
+        );
+
+        if (
+          task.validation
+            .blockedReason
+        ) {
+          console.log(
+            `  Bloqueio: ${task.validation.blockedReason}`
+          );
+        }
+
+        const lastAttempt =
+          task.validation.attempts.at(
+            -1
+          );
+
+        if (lastAttempt?.diagnosis) {
+          console.log(
+            `  Diagnóstico: ${lastAttempt.diagnosis}`
+          );
+        }
+      }
+
       if (
         task.status ===
           "FAILED" &&
@@ -431,6 +465,25 @@ async function main() {
       ) {
         console.log(
           `  Erro: ${task.error}`
+        );
+      }
+
+      console.log();
+    }
+
+    if (plan.validation) {
+      console.log(
+        `Validação do plano: ${plan.validation.status}`
+      );
+
+      console.log(
+        `  ${plan.validation.reasoning}`
+      );
+
+      for (const warning of plan
+        .validation.gateWarnings) {
+        console.log(
+          `  Alerta: ${warning.message}`
         );
       }
 
@@ -686,10 +739,78 @@ async function main() {
     }
 
     if (
+      result.status ===
+        "NEEDS_HUMAN" &&
+      "blockedTasks" in result
+    ) {
+      console.log(
+        "\nPRECISA DE INTERVENÇÃO HUMANA"
+      );
+
+      for (
+        const task
+        of result.blockedTasks
+      ) {
+        const agente =
+          nomesAgentes[
+            task.agent
+          ] ??
+          task.agent.toUpperCase();
+
+        console.log(
+          `- ${task.id} | ${agente}`
+        );
+
+        console.log(
+          `  Motivo: ${task.blockedReason}`
+        );
+
+        if (task.lastDiagnosis) {
+          console.log(
+            `  Diagnóstico: ${task.lastDiagnosis}`
+          );
+        }
+      }
+    }
+
+    if (
+      "planValidation" in result &&
+      result.planValidation
+    ) {
+      console.log(
+        "\nVALIDAÇÃO DO OBJETIVO"
+      );
+
+      console.log(
+        `Status: ${result.planValidation.status}`
+      );
+
+      console.log(
+        result.planValidation.reasoning
+      );
+
+      for (const warning of result
+        .planValidation.gateWarnings) {
+        console.log(
+          `Alerta: ${warning.message}`
+        );
+      }
+    }
+
+    if (
       result.status === "DONE"
     ) {
       console.log(
         "\nPLANO CONCLUÍDO COM SUCESSO."
+      );
+    }
+
+    if (
+      result.status ===
+      "OBJECTIVE_NOT_MET"
+    ) {
+      console.log(
+        "\nTODAS AS TAREFAS FORAM CONCLUÍDAS, MAS O OBJETIVO NÃO FOI CONFIRMADO."
       );
     }
 

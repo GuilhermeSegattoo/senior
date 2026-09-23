@@ -86,7 +86,10 @@ export class AgentExecutor {
         );
       }
 
-      if (dependency.status !== "DONE") {
+      if (
+        dependency.status !== "DONE" &&
+        dependency.status !== "VALIDATED"
+      ) {
         throw new Error(
           `Dependência ${dependencyId} ainda não foi concluída.`
         );
@@ -112,7 +115,8 @@ ${dependency.result ?? "Nenhum resultado registrado."}
   async execute(
     projectId: string,
     task: ManagedTask,
-    options: AgentExecutionOptions
+    options: AgentExecutionOptions,
+    correctionContext?: string
   ): Promise<string> {
     const project =
       await this.projectManager.getById(
@@ -205,7 +209,11 @@ ID: ${task.id}
 Agente: ${task.agent}
 
 ${task.task}
-
+${
+  correctionContext
+    ? `\n# CONTEXTO DE CORREÇÃO\n\n${correctionContext}\n`
+    : ""
+}
 # DEPENDÊNCIAS CONCLUÍDAS
 
 ${dependencyContext}

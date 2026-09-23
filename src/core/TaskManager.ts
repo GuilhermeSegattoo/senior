@@ -14,6 +14,7 @@ import type {
 } from "../types/Task.js";
 
 import type {
+  PlanValidation,
   TaskValidation,
 } from "../types/Validation.js";
 
@@ -166,19 +167,14 @@ export class TaskManager {
 
     const dependenciesCompleted =
       task.dependsOn.every(
-        (dependencyId) => {
-          const dependency =
+        (dependencyId) =>
+          this.isDependencySatisfied(
             plan.tasks.find(
               (item) =>
                 item.id ===
                 dependencyId
-            );
-
-          return (
-            dependency?.status ===
-            "DONE"
-          );
-        }
+            )
+          )
       );
 
     if (
@@ -291,9 +287,111 @@ export class TaskManager {
       );
     }
 
-    this.releaseReadyTasks(
-      plan
+    /*
+     * Tarefas com requisitos de validação não liberam
+     * dependentes ainda: o Orchestrator chama
+     * applyValidationResult() em seguida, e só então
+     * (se VALIDATED) os dependentes são liberados.
+     */
+    if (!this.hasValidationRequirements(task)) {
+      this.releaseReadyTasks(
+        plan
+      );
+    }
+
+    await this.writePlan(plan);
+
+    return plan;
+  }
+
+  hasValidationRequirements(
+    task: ManagedTask
+  ): boolean {
+    return Boolean(
+      task.businessRules?.length ||
+      task.acceptanceCriteria?.length ||
+      task.requiredChecks?.length
     );
+  }
+
+  async startCorrection(
+    projectId: string,
+    taskId: string
+  ): Promise<ManagedPlan> {
+    const plan =
+      await this.requirePlan(
+        projectId
+      );
+
+    const task =
+      this.requireTask(
+        plan,
+        taskId
+      );
+
+    if (
+      task.status !== "CORRECTION_REQUIRED"
+    ) {
+      throw new Error(
+        `A tarefa ${taskId} não está aguardando correção. Estado atual: ${task.status}`
+      );
+    }
+
+    task.status = "RUNNING";
+    task.error = undefined;
+
+    await this.writePlan(plan);
+
+    return plan;
+  }
+
+  async applyValidationResult(
+    projectId: string,
+    taskId: string,
+    status:
+      | "VALIDATED"
+      | "CORRECTION_REQUIRED"
+      | "BLOCKED",
+    validation: TaskValidation
+  ): Promise<ManagedPlan> {
+    const plan =
+      await this.requirePlan(
+        projectId
+      );
+
+    const task =
+      this.requireTask(
+        plan,
+        taskId
+      );
+
+    task.validation = validation;
+    task.status = status;
+
+    if (status === "VALIDATED") {
+      task.completedAt =
+        new Date().toISOString();
+
+      this.releaseReadyTasks(
+        plan
+      );
+    }
+
+    await this.writePlan(plan);
+
+    return plan;
+  }
+
+  async setPlanValidation(
+    projectId: string,
+    validation: PlanValidation
+  ): Promise<ManagedPlan> {
+    const plan =
+      await this.requirePlan(
+        projectId
+      );
+
+    plan.validation = validation;
 
     await this.writePlan(plan);
 
@@ -346,7 +444,8 @@ export class TaskManager {
     task.status = status;
 
     if (
-      status === "DONE"
+      status === "DONE" ||
+      status === "VALIDATED"
     ) {
       task.completedAt =
         new Date().toISOString();
@@ -460,6 +559,22 @@ export class TaskManager {
     );
   }
 
+  /*
+   * Uma dependência só libera trabalho dependente quando está
+   * DONE (sem requisitos de validação) ou VALIDATED (passou pelo
+   * Validation Loop). Isso implementa a regra da seção 7 do
+   * SENIOR_MASTER_PLAN.md: "não liberar dependências antes de
+   * VALIDATED".
+   */
+  private isDependencySatisfied(
+    dependency: ManagedTask | undefined
+  ): boolean {
+    return (
+      dependency?.status === "DONE" ||
+      dependency?.status === "VALIDATED"
+    );
+  }
+
   private releaseReadyTasks(
     plan: ManagedPlan
   ): void {
@@ -474,19 +589,14 @@ export class TaskManager {
 
       const dependenciesCompleted =
         task.dependsOn.every(
-          (dependencyId) => {
-            const dependency =
+          (dependencyId) =>
+            this.isDependencySatisfied(
               plan.tasks.find(
                 (item) =>
                   item.id ===
                   dependencyId
-              );
-
-            return (
-              dependency?.status ===
-              "DONE"
-            );
-          }
+              )
+            )
         );
 
       if (

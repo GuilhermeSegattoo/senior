@@ -1,6 +1,7 @@
 import type {
   AcceptanceCriterion,
   BusinessRule,
+  PlanValidation,
   RequiredCheck,
   TaskValidation,
 } from "./Validation.js";
@@ -17,8 +18,12 @@ export type TaskStatus =
   | "WAITING"
   | "READY"
   | "RUNNING"
+  | "VALIDATING"
+  | "CORRECTION_REQUIRED"
+  | "VALIDATED"
   | "DONE"
-  | "FAILED";
+  | "FAILED"
+  | "BLOCKED";
 
 export interface PlannedTask {
   id: string;
@@ -93,4 +98,5 @@ export interface ManagedPlan {
   objective: string;
   createdAt: string;
   tasks: ManagedTask[];
+  validation?: PlanValidation;
 }
