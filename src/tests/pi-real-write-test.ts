@@ -11,7 +11,7 @@ import path from "node:path";
 import { PiRuntime } from "../runtimes/PiRuntime.js";
 
 const workspace = await mkdtemp(
-  path.join(os.tmpdir(), "jarvis-pi-write-")
+  path.join(os.tmpdir(), "senior-pi-write-")
 );
 
 try {
@@ -21,7 +21,7 @@ try {
   );
 
   console.log(
-    "=== JARVIS → PI → GPT → SAFE WRITE TOOL ==="
+    "=== SENIOR → PI → GPT → SAFE WRITE TOOL ==="
   );
 
   console.log("Workspace:", workspace);
@@ -36,7 +36,7 @@ try {
       "Use obrigatoriamente a ferramenta write_project_file.",
       "Crie o arquivo src/pi-created.txt.",
       "O conteúdo do arquivo deve ser exatamente:",
-      "JARVIS PI SAFE WRITE OK",
+      "SENIOR PI SAFE WRITE OK",
       "Não use nenhuma outra forma de escrita.",
       "Depois responda apenas: ARQUIVO CRIADO",
     ].join("\n"),
@@ -64,7 +64,7 @@ try {
 
   if (
     content !==
-    "JARVIS PI SAFE WRITE OK"
+    "SENIOR PI SAFE WRITE OK"
   ) {
     throw new Error(
       "O conteúdo criado pelo Pi está incorreto."

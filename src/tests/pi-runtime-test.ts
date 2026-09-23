@@ -6,13 +6,13 @@ import {
 import { PiRuntime } from "../runtimes/PiRuntime.js";
 
 async function main() {
-  console.log("\n=== JARVIS → PI RUNTIME ===");
+  console.log("\n=== SENIOR → PI RUNTIME ===");
 
   const faux = createFauxCore({});
 
   faux.setResponses([
     fauxAssistantMessage(
-      "JARVIS PI RUNTIME ONLINE"
+      "SENIOR PI RUNTIME ONLINE"
     ),
   ]);
 
@@ -39,7 +39,7 @@ async function main() {
   );
 
   const result = await runtime.ask(
-    "Responda somente: JARVIS PI RUNTIME ONLINE",
+    "Responda somente: SENIOR PI RUNTIME ONLINE",
     {
       cwd: process.cwd(),
       readOnly: true,
@@ -53,7 +53,7 @@ async function main() {
 
   if (
     result.text !==
-    "JARVIS PI RUNTIME ONLINE"
+    "SENIOR PI RUNTIME ONLINE"
   ) {
     throw new Error(
       `Resposta inesperada: ${result.text}`
@@ -61,7 +61,7 @@ async function main() {
   }
 
   console.log(
-    "\nJARVIS → PI RUNTIME FUNCIONANDO."
+    "\nSENIOR → PI RUNTIME FUNCIONANDO."
   );
 }
 

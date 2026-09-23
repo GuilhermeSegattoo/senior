@@ -26,13 +26,13 @@ const workspace =
   await mkdtemp(
     path.join(
       os.tmpdir(),
-      "jarvis-validation-engine-"
+      "senior-validation-engine-"
     )
   );
 
 try {
   console.log(
-    "\n=== JARVIS VALIDATION ENGINE ==="
+    "\n=== SENIOR VALIDATION ENGINE ==="
   );
 
   console.log(
@@ -94,24 +94,24 @@ try {
    * dependências próprias.
    *
    * Para este teste usamos o
-   * node_modules já instalado no Jarvis.
+   * node_modules já instalado no Senior.
    */
-  const jarvisRoot =
+  const seniorRoot =
     path.resolve(
       import.meta.dirname,
       "../.."
     );
 
-  const jarvisNodeModules =
+  const seniorNodeModules =
     await realpath(
       path.join(
-        jarvisRoot,
+        seniorRoot,
         "node_modules"
       )
     );
 
   await symlink(
-    jarvisNodeModules,
+    seniorNodeModules,
     path.join(
       workspace,
       "node_modules"

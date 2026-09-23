@@ -139,7 +139,7 @@ export class GitManager {
         [
           "config",
           "user.name",
-          "JARVIS",
+          "SENIOR",
         ]
       );
     }
@@ -158,7 +158,7 @@ export class GitManager {
         [
           "config",
           "user.email",
-          "jarvis@local",
+          "senior@local",
         ]
       );
     }
@@ -260,7 +260,7 @@ export class GitManager {
     ];
 
     const branch =
-      `jarvis/${taskId}`;
+      `senior/${taskId}`;
 
     const workspacePath =
       this.getTaskWorkspacePath(
@@ -494,7 +494,7 @@ export class GitManager {
       [
         "commit",
         "-m",
-        `jarvis: complete ${taskId}`,
+        `senior: complete ${taskId}`,
       ]
     );
 

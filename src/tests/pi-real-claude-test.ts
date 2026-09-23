@@ -4,7 +4,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 async function main() {
-  console.log("\n=== JARVIS → PI → CLAUDE REAL ===");
+  console.log("\n=== SENIOR → PI → CLAUDE REAL ===");
 
   const services =
     await createAgentSessionServices({
@@ -52,7 +52,7 @@ async function main() {
   const session = result.session;
 
   await session.prompt(
-    "Responda somente: JARVIS PI CLAUDE REAL ONLINE"
+    "Responda somente: SENIOR PI CLAUDE REAL ONLINE"
   );
 
   const lastAssistant =
@@ -92,7 +92,7 @@ async function main() {
 
   if (
     text !==
-    "JARVIS PI CLAUDE REAL ONLINE"
+    "SENIOR PI CLAUDE REAL ONLINE"
   ) {
     throw new Error(
       `Resposta inesperada: ${text}`

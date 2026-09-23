@@ -2,7 +2,7 @@ import { WorkspaceGuard } from "../tools/WorkspaceGuard.js";
 
 const guard =
   new WorkspaceGuard(
-    "/tmp/jarvis-workspace"
+    "/tmp/senior-workspace"
   );
 
 function expectAllowed(

@@ -11,7 +11,7 @@ import { WriteProjectFileTool } from "../tools/WriteProjectFileTool.js";
 
 async function main() {
   const root = await mkdtemp(
-    path.join(os.tmpdir(), "jarvis-write-test-")
+    path.join(os.tmpdir(), "senior-write-test-")
   );
 
   const workspace = path.join(root, "workspace");
@@ -29,7 +29,7 @@ async function main() {
 
   await tool.execute(
     "src/hello.txt",
-    "JARVIS WRITE OK"
+    "SENIOR WRITE OK"
   );
 
   const content = await readFile(
@@ -39,7 +39,7 @@ async function main() {
 
   console.log(
     "Escrita normal:",
-    content === "JARVIS WRITE OK"
+    content === "SENIOR WRITE OK"
   );
 
   let traversalBlocked = false;
@@ -80,7 +80,7 @@ async function main() {
   );
 
   if (
-    content !== "JARVIS WRITE OK" ||
+    content !== "SENIOR WRITE OK" ||
     !traversalBlocked ||
     !symlinkBlocked
   ) {

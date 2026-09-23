@@ -216,7 +216,7 @@ Execute somente a tarefa delegada.
 
 Trabalhe exclusivamente dentro do workspace autorizado.
 
-Não altere o código-fonte do JARVIS.
+Não altere o código-fonte do SENIOR.
 
 Não altere outros projetos.
 
@@ -230,7 +230,7 @@ Não execute git push.
 
 Não faça merge.
 
-O JARVIS é responsável pelo controle Git.
+O SENIOR é responsável pelo controle Git.
 
 Use o trabalho das dependências como contexto técnico.
 

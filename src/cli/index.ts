@@ -1,6 +1,6 @@
 import { Orchestrator } from "../core/Orchestrator.js";
 
-const jarvis = new Orchestrator();
+const senior = new Orchestrator();
 
 const nomesAgentes: Record<string, string> = {
   architect: "ARQUITETO",
@@ -29,9 +29,9 @@ async function main() {
 
   if (command === "status") {
     const status =
-      await jarvis.status();
+      await senior.status();
 
-    console.log("\nJARVIS");
+    console.log("\nSENIOR");
     console.log("--------------------------------");
 
     console.log(
@@ -76,7 +76,7 @@ async function main() {
     args[0] === "status"
   ) {
     const github =
-      await jarvis.githubStatus();
+      await senior.githubStatus();
 
     console.log("\nGITHUB");
     console.log("--------------------------------");
@@ -121,14 +121,14 @@ async function main() {
 
     if (!name) {
       console.error(
-        'Uso: jarvis projeto criar "Nome do projeto"'
+        'Uso: senior projeto criar "Nome do projeto"'
       );
 
       process.exit(1);
     }
 
     const project =
-      await jarvis.createProject(
+      await senior.createProject(
         name
       );
 
@@ -179,10 +179,10 @@ async function main() {
 
   if (command === "projetos") {
     const projects =
-      await jarvis.listProjects();
+      await senior.listProjects();
 
     console.log(
-      "\nPROJETOS JARVIS"
+      "\nPROJETOS SENIOR"
     );
 
     console.log(
@@ -261,18 +261,18 @@ async function main() {
       !objective
     ) {
       console.error(
-        'Uso: jarvis plan <projeto> "<objetivo>"'
+        'Uso: senior plan <projeto> "<objetivo>"'
       );
 
       console.error(
-        'Exemplo: jarvis plan auth-api "Criar autenticação"'
+        'Exemplo: senior plan auth-api "Criar autenticação"'
       );
 
       process.exit(1);
     }
 
     console.log(
-      "\nJARVIS está criando o plano...\n"
+      "\nSENIOR está criando o plano...\n"
     );
 
     console.log(
@@ -280,7 +280,7 @@ async function main() {
     );
 
     const plan =
-      await jarvis.createPlan(
+      await senior.createPlan(
         projectId,
         objective
       );
@@ -344,14 +344,14 @@ async function main() {
 
     if (!projectId) {
       console.error(
-        "Uso: jarvis tarefas <projeto>"
+        "Uso: senior tarefas <projeto>"
       );
 
       process.exit(1);
     }
 
     const plan =
-      await jarvis.getTasks(
+      await senior.getTasks(
         projectId
       );
 
@@ -456,17 +456,17 @@ async function main() {
       !taskId
     ) {
       console.error(
-        "Uso: jarvis retry <projeto> <tarefa>"
+        "Uso: senior retry <projeto> <tarefa>"
       );
 
       console.error(
-        "Exemplo: jarvis retry auth-api task-4"
+        "Exemplo: senior retry auth-api task-4"
       );
 
       process.exit(1);
     }
 
-    await jarvis.retryTask(
+    await senior.retryTask(
       projectId,
       taskId
     );
@@ -508,18 +508,18 @@ async function main() {
 
     if (!projectId) {
       console.error(
-        "Uso: jarvis run <projeto>"
+        "Uso: senior run <projeto>"
       );
 
       console.error(
-        "Exemplo: jarvis run auth-api"
+        "Exemplo: senior run auth-api"
       );
 
       process.exit(1);
     }
 
     console.log(
-      "\nJARVIS — EXECUÇÃO AUTÔNOMA"
+      "\nSENIOR — EXECUÇÃO AUTÔNOMA"
     );
 
     console.log(
@@ -539,7 +539,7 @@ async function main() {
     );
 
     const result =
-      await jarvis.runProject(
+      await senior.runProject(
         projectId
       );
 
@@ -635,7 +635,7 @@ async function main() {
       }
 
       console.log(
-        "\nJARVIS interrompeu o ciclo por segurança."
+        "\nSENIOR interrompeu o ciclo por segurança."
       );
     }
 
@@ -718,18 +718,18 @@ async function main() {
       !taskId
     ) {
       console.error(
-        "Uso: jarvis executar <projeto> <tarefa>"
+        "Uso: senior executar <projeto> <tarefa>"
       );
 
       console.error(
-        "Exemplo: jarvis executar auth-api task-2"
+        "Exemplo: senior executar auth-api task-2"
       );
 
       process.exit(1);
     }
 
     console.log(
-      `\nJARVIS está delegando ${taskId}...`
+      `\nSENIOR está delegando ${taskId}...`
     );
 
     console.log(
@@ -737,7 +737,7 @@ async function main() {
     );
 
     const execution =
-      await jarvis.executeTask(
+      await senior.executeTask(
         projectId,
         taskId
       );
@@ -858,13 +858,13 @@ async function main() {
       !taskId
     ) {
       console.error(
-        "Uso: jarvis concluir <projeto> <tarefa>"
+        "Uso: senior concluir <projeto> <tarefa>"
       );
 
       process.exit(1);
     }
 
-    await jarvis.completeTask(
+    await senior.completeTask(
       projectId,
       taskId
     );
@@ -890,18 +890,18 @@ async function main() {
 
     if (!message) {
       console.error(
-        'Uso: jarvis ask "sua solicitação"'
+        'Uso: senior ask "sua solicitação"'
       );
 
       process.exit(1);
     }
 
     console.log(
-      "\nJARVIS está analisando...\n"
+      "\nSENIOR está analisando...\n"
     );
 
     const response =
-      await jarvis.talkToChief(
+      await senior.talkToChief(
         message
       );
 
@@ -919,12 +919,12 @@ async function main() {
   // =========================================================
 
   console.log(`
-JARVIS CLI
+SENIOR CLI
 
 STATUS
 
   status
-      Exibe o estado geral do JARVIS.
+      Exibe o estado geral do SENIOR.
 
 GITHUB
 
@@ -958,28 +958,28 @@ EXECUÇÃO
   concluir <projeto> <tarefa>
       Marca manualmente uma tarefa como concluída.
 
-JARVIS
+SENIOR
 
   ask "<solicitação>"
       Conversa diretamente com o Líder.
 
 EXEMPLOS
 
-  npm run jarvis -- status
+  npm run senior -- status
 
-  npm run jarvis -- projetos
+  npm run senior -- projetos
 
-  npm run jarvis -- tarefas auth-api
+  npm run senior -- tarefas auth-api
 
-  npm run jarvis -- retry auth-api task-4
+  npm run senior -- retry auth-api task-4
 
-  npm run jarvis -- executar auth-api task-4
+  npm run senior -- executar auth-api task-4
 `);
 }
 
 main().catch((error) => {
   console.error(
-    "\nErro no JARVIS:"
+    "\nErro no SENIOR:"
   );
 
   if (

@@ -52,7 +52,7 @@ ${instructions}
 
 ${message}
 
-Responda como JARVIS.
+Responda como SENIOR.
 `;
 
     return this.codex.ask(prompt);
@@ -621,7 +621,7 @@ if (hasValidation) {
       }
 
       console.log(
-        `\n[JARVIS] Executando ${nextTask.id} (${nextTask.agent})...`
+        `\n[SENIOR] Executando ${nextTask.id} (${nextTask.agent})...`
       );
 
       try {
@@ -650,11 +650,11 @@ if (hasValidation) {
         });
 
         console.log(
-          `[JARVIS] ${nextTask.id} concluída.`
+          `[SENIOR] ${nextTask.id} concluída.`
         );
 
         console.log(
-          `[JARVIS] HEAD: ${execution.git.headCommit}`
+          `[SENIOR] HEAD: ${execution.git.headCommit}`
         );
       } catch (error) {
         const message =
@@ -677,7 +677,7 @@ if (hasValidation) {
         });
 
         console.error(
-          `[JARVIS] ${nextTask.id} falhou: ${message}`
+          `[SENIOR] ${nextTask.id} falhou: ${message}`
         );
 
         /*

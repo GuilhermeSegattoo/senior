@@ -19,11 +19,11 @@ export class RuntimeManager {
 
       case "pi": {
         const provider =
-          process.env.JARVIS_PI_PROVIDER?.trim() ||
+          process.env.SENIOR_PI_PROVIDER?.trim() ||
           "openai-codex";
 
         const modelName =
-          process.env.JARVIS_PI_MODEL?.trim() ||
+          process.env.SENIOR_PI_MODEL?.trim() ||
           "gpt-6-astra";
 
         return new PiRuntime({
@@ -45,7 +45,7 @@ export class RuntimeManager {
 
   fromEnvironment(): AgentRuntime {
     const configured =
-      process.env.JARVIS_AGENT_RUNTIME
+      process.env.SENIOR_AGENT_RUNTIME
         ?.trim()
         .toLowerCase();
 
@@ -58,7 +58,7 @@ export class RuntimeManager {
       configured !== "pi"
     ) {
       throw new Error(
-        `JARVIS_AGENT_RUNTIME inválido: ${configured}`
+        `SENIOR_AGENT_RUNTIME inválido: ${configured}`
       );
     }
 

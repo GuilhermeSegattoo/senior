@@ -206,7 +206,7 @@ export class ValidationEngine {
       type: typeMap[check],
 
       description:
-        `Check ${check} executado pelo Jarvis.`,
+        `Check ${check} executado pelo Senior.`,
 
       source: command,
 

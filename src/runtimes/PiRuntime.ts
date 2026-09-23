@@ -206,7 +206,7 @@ export class PiRuntime implements AgentRuntime {
     options: AgentRuntimeOptions
   ): string {
     return [
-      "Você é um agente executado pelo Jarvis.",
+      "Você é um agente executado pelo Senior.",
       `Workspace autorizado: ${options.cwd}`,
       options.readOnly
         ? "Modo: somente leitura."

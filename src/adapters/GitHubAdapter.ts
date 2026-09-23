@@ -67,7 +67,7 @@ export class GitHubAdapter {
         name,
         "--private",
         "--description",
-        `Projeto gerenciado pelo JARVIS: ${name}`,
+        `Projeto gerenciado pelo SENIOR: ${name}`,
       ],
       {
         timeout: 30_000,

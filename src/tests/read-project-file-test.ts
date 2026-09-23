@@ -12,7 +12,7 @@ async function main() {
 
   console.log(
     "Conteúdo encontrado:",
-    result.content.includes("\"jarvis\"")
+    result.content.includes("\"senior\"")
   );
 
   try {

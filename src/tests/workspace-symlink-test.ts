@@ -18,7 +18,7 @@ async function main() {
     await mkdtemp(
       path.join(
         os.tmpdir(),
-        "jarvis-guard-"
+        "senior-guard-"
       )
     );
 

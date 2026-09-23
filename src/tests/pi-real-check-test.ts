@@ -16,7 +16,7 @@ import { PiRuntime } from "../runtimes/PiRuntime.js";
 const workspace = await mkdtemp(
   path.join(
     os.tmpdir(),
-    "jarvis-pi-check-"
+    "senior-pi-check-"
   )
 );
 
@@ -60,7 +60,7 @@ try {
       "index.ts"
     ),
     [
-      "const message: string = 'JARVIS';",
+      "const message: string = 'SENIOR';",
       "console.log(message);",
       "",
     ].join("\n"),
@@ -69,11 +69,11 @@ try {
 
   /*
    * O workspace temporário precisa ter acesso
-   * às dependências já instaladas no Jarvis.
+   * às dependências já instaladas no Senior.
    *
    * Não instalamos nada da internet.
    */
-  const jarvisRoot =
+  const seniorRoot =
     await realpath(
       path.resolve(
         import.meta.dirname,
@@ -81,9 +81,9 @@ try {
       )
     );
 
-  const jarvisNodeModules =
+  const seniorNodeModules =
     path.join(
-      jarvisRoot,
+      seniorRoot,
       "node_modules"
     );
 
@@ -94,13 +94,13 @@ try {
     );
 
   await symlink(
-    jarvisNodeModules,
+    seniorNodeModules,
     workspaceNodeModules,
     "dir"
   );
 
   console.log(
-    "=== JARVIS → PI → GPT → SAFE PROJECT CHECK ==="
+    "=== SENIOR → PI → GPT → SAFE PROJECT CHECK ==="
   );
 
   console.log(
@@ -171,7 +171,7 @@ try {
 
   if (
     !source.includes(
-      "const message: string = 'JARVIS';"
+      "const message: string = 'SENIOR';"
     )
   ) {
     throw new Error(

@@ -182,7 +182,7 @@ export class RunProjectCheckTool {
               .join("\n");
 
             console.log(
-              "\n[JARVIS CHECK DEBUG]"
+              "\n[SENIOR CHECK DEBUG]"
             );
 
             console.log(
