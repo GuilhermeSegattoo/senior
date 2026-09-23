@@ -1147,13 +1147,11 @@ integração** — vale ler antes de mexer em Git/dependências:
 
 # 23. Próxima tarefa imediata
 
-Fases A, B, C e D estão prontas. A próxima etapa é a **Fase E — Event
-Bus** (seção 24 e 16): hoje o único jeito de acompanhar um job rodando
-é chamar `senior job status <jobId>` repetidamente (polling) ou ler o
-log bruto. Um event bus com eventos estruturados
-(`task.started`, `tool.completed`, `validation.failed`, etc.) é o que
-vai alimentar terminal visual/canvas/timeline mais tarde (Fase G) sem
-depender de "scraping" de log.
+Fases A, B, C, D e E estão prontas. A próxima etapa é a **Fase F —
+API/Gateway** (seção 24): expor projetos, jobs, tarefas, agentes,
+eventos, approvals, logs e memória via HTTP (e depois WebSocket/SSE
+para os eventos em tempo real) — é o que permite um frontend (Fase G)
+existir sem precisar rodar a CLI localmente.
 
 Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
 
@@ -1318,9 +1316,65 @@ start→running→completed com processo real destacado (sem depender de
 LLM — usa um runner falso injetável), captura de log, `list()`,
 `reconcile()` de job travado, e o guard de erro de spawn.
 
-## Fase E --- Event Bus
+## Fase E --- Event Bus --- ✅ CONCLUÍDA
 
-Criar eventos estruturados para todas as operações importantes.
+`EventBus` (`src/core/EventBus.ts`) persiste cada evento em
+`data/events/<projectId>.jsonl` (append-only, JSON Lines — um objeto
+por linha, lido por `senior events <projeto>` ou por qualquer
+consumidor futuro, inclusive de outro processo) e também emite num
+`EventEmitter` em memória para quem estiver escutando no mesmo
+processo (`bus.on(tipo, listener)`).
+
+Tipos implementados (subconjunto real da lista da seção 16 — só o que
+o Senior consegue emitir a partir de transições de estado que já
+existem, honestamente):
+
+```
+project.created    plan.created       task.ready
+task.started       agent.started      agent.message
+validation.started validation.failed  validation.passed
+task.blocked       task.validated     commit.created
+job.completed
+```
+
+Onde cada um é emitido:
+
+-   `project.created`/`plan.created`: `Orchestrator.createProject()` /
+    `createPlan()`.
+-   `task.ready`/`task.started`/`task.validated`/`task.blocked`: no
+    `TaskManager`, exatamente onde a transição de estado acontece
+    (`releaseReadyTasks`, `startTask`/`startCorrection`,
+    `applyValidationResult`) — não inferido de fora.
+-   `agent.started`/`agent.message`: `Orchestrator.executeTask()` /
+    `correctTask()`, ao redor da chamada ao `AgentExecutor`.
+-   `commit.created`: idem, quando `commitResult.changed` é true.
+-   `validation.started`/`validation.failed`/`validation.passed`:
+    `Orchestrator.runValidationLoop()`.
+-   `job.completed`: `src/jobs/runJob.ts`, depois de
+    `JobManager.markCompleted()`.
+
+**Deliberadamente fora** (exigiriam instrumentação que não existe
+ainda, ver comentário em `src/types/Event.ts`):
+
+-   `tool.started`/`tool.completed`: o loop de ferramentas roda dentro
+    do PiRuntime/Codex; o Orchestrator não vê chamadas individuais de
+    ferramenta.
+-   `file.changed`: exigiria diff por arquivo, não só por commit.
+-   `approval.required`: não existe mecanismo de approvals ainda
+    (isso é trabalho de uma fase futura, não coberta no roadmap atual
+    A-I).
+-   `check.started`/`check.completed`: existe só como
+    `validation.started`/`.failed`/`.passed` em granularidade mais
+    grossa (por tentativa de validação, não por check individual).
+
+CLI: `senior events <projeto> [limite]`.
+
+Testado em `src/tests/event-bus-test.ts` (emit/on/off/list, filtros
+`since`/`limit`, persistência lida por uma segunda instância — simula
+outro processo) e em
+`src/tests/orchestrator-validation-integration-test.ts`, que agora
+também verifica que o fluxo real (execução + correção + validação)
+deixa o rastro de eventos esperado.
 
 ## Fase F --- API / Gateway
 
@@ -1604,8 +1658,8 @@ A ordem imediata é:
 8. Plan-level Validation                                 ✅ FEITO
 9. Memory (project memory)                               ✅ FEITO
 10. Jobs                                                 ✅ FEITO
-11. Events                                               <- PRÓXIMO (Fase E)
-12. API
+11. Events                                               ✅ FEITO
+12. API                                                  <- PRÓXIMO (Fase F)
 13. Frontend visual
 14. Paralelismo
 15. Alexa

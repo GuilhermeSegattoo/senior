@@ -11,6 +11,7 @@ import { ValidationEngine } from "./ValidationEngine.js";
 import { SemanticValidator } from "./SemanticValidator.js";
 import { PlanValidator } from "./PlanValidator.js";
 import { ProjectMemory } from "./ProjectMemory.js";
+import { EventBus } from "./EventBus.js";
 
 import type {
   ExecutionPlan,
@@ -34,6 +35,7 @@ export class Orchestrator {
   private gitManager = new GitManager();
 private validationEngine = new ValidationEngine();
 private projectMemory = new ProjectMemory();
+private eventBus = new EventBus();
 
 /*
  * Não privados de propósito: testes de integração injetam
@@ -87,9 +89,23 @@ Responda como SENIOR.
   // =========================================================
 
   async createProject(name: string) {
-    return this.projectManager.create({
-      name,
+    const project =
+      await this.projectManager.create(
+        {
+          name,
+        }
+      );
+
+    await this.eventBus.emit({
+      type: "project.created",
+      projectId: project.id,
+      data: {
+        name: project.name,
+        path: project.path,
+      },
     });
+
+    return project;
   }
 
   async listProjects() {
@@ -243,6 +259,17 @@ Regras:
     await this.taskManager.savePlan(
       plan
     );
+
+    await this.eventBus.emit({
+      type: "plan.created",
+      projectId,
+      data: {
+        objective:
+          plan.objective,
+        taskCount:
+          plan.tasks.length,
+      },
+    });
 
     return plan;
   }
@@ -398,6 +425,15 @@ Regras:
       // EXECUTAR AGENTE
       // =====================================================
 
+      await this.eventBus.emit({
+        type: "agent.started",
+        projectId,
+        taskId,
+        data: {
+          agent: task.agent,
+        },
+      });
+
       const result =
         await this.agentExecutor.execute(
           projectId,
@@ -411,6 +447,19 @@ Regras:
           }
         );
 
+      await this.eventBus.emit({
+        type: "agent.message",
+        projectId,
+        taskId,
+        data: {
+          agent: task.agent,
+          message: result.slice(
+            0,
+            2000
+          ),
+        },
+      });
+
       // =====================================================
       // COMMIT / HEAD FINAL
       // =====================================================
@@ -420,6 +469,20 @@ Regras:
           workspace.path,
           taskId
         );
+
+      if (commitResult.changed) {
+        await this.eventBus.emit({
+          type: "commit.created",
+          projectId,
+          taskId,
+          data: {
+            commit:
+              commitResult.commit,
+            headCommit:
+              commitResult.headCommit,
+          },
+        });
+      }
 
       /*
        * Mesmo quando nenhum arquivo foi alterado,
@@ -610,6 +673,16 @@ Regras:
           task
         );
 
+      await this.eventBus.emit({
+        type: "agent.started",
+        projectId,
+        taskId,
+        data: {
+          agent: task.agent,
+          correction: true,
+        },
+      });
+
       const result =
         await this.agentExecutor.execute(
           projectId,
@@ -624,6 +697,19 @@ Regras:
           correctionContext
         );
 
+      await this.eventBus.emit({
+        type: "agent.message",
+        projectId,
+        taskId,
+        data: {
+          agent: task.agent,
+          message: result.slice(
+            0,
+            2000
+          ),
+        },
+      });
+
       const previousHeadCommit =
         task.headCommit ??
         task.commit;
@@ -633,6 +719,20 @@ Regras:
           task.workspacePath,
           taskId
         );
+
+      if (commitResult.changed) {
+        await this.eventBus.emit({
+          type: "commit.created",
+          projectId,
+          taskId,
+          data: {
+            commit:
+              commitResult.commit,
+            headCommit:
+              commitResult.headCommit,
+          },
+        });
+      }
 
       await this.taskManager.finishTask(
         projectId,
@@ -919,6 +1019,18 @@ Regras:
       "VALIDATING"
     );
 
+    await this.eventBus.emit({
+      type: "validation.started",
+      projectId: params.projectId,
+      taskId: params.taskId,
+      data: {
+        attempt:
+          (params.task.validation
+            ?.attempts.length ??
+            0) + 1,
+      },
+    });
+
     const validation: TaskValidation =
       params.task.validation ?? {
         status: "PENDING",
@@ -1114,6 +1226,21 @@ Regras:
       status,
       validation
     );
+
+    await this.eventBus.emit({
+      type:
+        status === "VALIDATED"
+          ? "validation.passed"
+          : "validation.failed",
+      projectId: params.projectId,
+      taskId: params.taskId,
+      data: {
+        status,
+        attempts:
+          validation.attempts
+            .length,
+      },
+    });
 
     return {
       status,

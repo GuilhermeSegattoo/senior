@@ -10,6 +10,7 @@ import { Orchestrator } from "../core/Orchestrator.js";
 import { AgentExecutor } from "../core/AgentExecutor.js";
 import { SemanticValidator } from "../core/SemanticValidator.js";
 import { TaskManager } from "../core/TaskManager.js";
+import { EventBus } from "../core/EventBus.js";
 
 import type {
   AgentRuntime,
@@ -20,6 +21,10 @@ import type {
 import type {
   ExecutionPlan,
 } from "../types/Task.js";
+
+import type {
+  SeniorEventType,
+} from "../types/Event.js";
 
 /*
  * Simula o agente executor: em vez de chamar um provedor de LLM
@@ -121,6 +126,18 @@ async function cleanup(
     ),
     {
       recursive: true,
+      force: true,
+    }
+  );
+
+  await rm(
+    path.join(
+      process.cwd(),
+      "data",
+      "events",
+      `${projectId}.jsonl`
+    ),
+    {
       force: true,
     }
   );
@@ -392,6 +409,56 @@ async function main() {
 
     console.log(
       "OK: tarefa sem requisitos de validação preserva o comportamento DONE tradicional."
+    );
+
+    // -------------------------------------------------------
+    // Event Bus (Fase E): o fluxo inteiro acima deveria ter
+    // deixado um rastro de eventos estruturados persistido.
+    // -------------------------------------------------------
+
+    const events =
+      await new EventBus().list(
+        project.id
+      );
+
+    const eventTypes = events.map(
+      (event) => event.type
+    );
+
+    /*
+     * "plan.created" fica de fora: este teste monta o plano
+     * diretamente via TaskManager.savePlan() (não passa por
+     * Orchestrator.createPlan(), que dependeria do Chief/LLM).
+     */
+    const expectedTypes: SeniorEventType[] =
+      [
+        "project.created",
+        "task.started",
+        "agent.started",
+        "agent.message",
+        "validation.started",
+        "validation.failed",
+        "validation.passed",
+        "task.validated",
+        "task.ready",
+      ];
+
+    const missing =
+      expectedTypes.filter(
+        (type) =>
+          !eventTypes.includes(
+            type
+          )
+      );
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Eventos esperados não foram emitidos: ${missing.join(", ")}. Emitidos: ${eventTypes.join(", ")}`
+      );
+    }
+
+    console.log(
+      "OK: o fluxo completo emite todos os eventos estruturados esperados (Event Bus)."
     );
 
     console.log(

@@ -18,6 +18,8 @@ import type {
   TaskValidation,
 } from "../types/Validation.js";
 
+import { EventBus } from "./EventBus.js";
+
 export interface TaskGitMetadata {
   branch?: string;
   workspacePath?: string;
@@ -26,6 +28,9 @@ export interface TaskGitMetadata {
 }
 
 export class TaskManager {
+  private readonly eventBus =
+    new EventBus();
+
   private dataDir = path.join(
     process.cwd(),
     "data",
@@ -138,6 +143,15 @@ export class TaskManager {
       undefined;
 
     await this.writePlan(plan);
+
+    await this.eventBus.emit({
+      type: "task.started",
+      projectId,
+      taskId,
+      data: {
+        agent: task.agent,
+      },
+    });
 
     return plan;
   }
@@ -294,7 +308,7 @@ export class TaskManager {
      * (se VALIDATED) os dependentes são liberados.
      */
     if (!this.hasValidationRequirements(task)) {
-      this.releaseReadyTasks(
+      await this.releaseReadyTasks(
         plan
       );
     }
@@ -342,6 +356,16 @@ export class TaskManager {
 
     await this.writePlan(plan);
 
+    await this.eventBus.emit({
+      type: "task.started",
+      projectId,
+      taskId,
+      data: {
+        agent: task.agent,
+        correction: true,
+      },
+    });
+
     return plan;
   }
 
@@ -372,12 +396,31 @@ export class TaskManager {
       task.completedAt =
         new Date().toISOString();
 
-      this.releaseReadyTasks(
+      await this.releaseReadyTasks(
         plan
       );
     }
 
     await this.writePlan(plan);
+
+    if (
+      status === "VALIDATED" ||
+      status === "BLOCKED"
+    ) {
+      await this.eventBus.emit({
+        type:
+          status === "VALIDATED"
+            ? "task.validated"
+            : "task.blocked",
+        projectId,
+        taskId,
+        data: {
+          agent: task.agent,
+          blockedReason:
+            validation.blockedReason,
+        },
+      });
+    }
 
     return plan;
   }
@@ -450,7 +493,7 @@ export class TaskManager {
       task.completedAt =
         new Date().toISOString();
 
-      this.releaseReadyTasks(
+      await this.releaseReadyTasks(
         plan
       );
     }
@@ -575,9 +618,9 @@ export class TaskManager {
     );
   }
 
-  private releaseReadyTasks(
+  private async releaseReadyTasks(
     plan: ManagedPlan
-  ): void {
+  ): Promise<void> {
     for (
       const task of plan.tasks
     ) {
@@ -603,6 +646,18 @@ export class TaskManager {
         dependenciesCompleted
       ) {
         task.status = "READY";
+
+        await this.eventBus.emit(
+          {
+            type: "task.ready",
+            projectId:
+              plan.projectId,
+            taskId: task.id,
+            data: {
+              agent: task.agent,
+            },
+          }
+        );
       }
     }
   }

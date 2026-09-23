@@ -1,8 +1,10 @@
 import { Orchestrator } from "../core/Orchestrator.js";
 import { JobManager } from "../core/JobManager.js";
+import { EventBus } from "../core/EventBus.js";
 
 const senior = new Orchestrator();
 const jobManager = new JobManager();
+const eventBus = new EventBus();
 
 const nomesAgentes: Record<string, string> = {
   architect: "ARQUITETO",
@@ -1019,6 +1021,71 @@ async function main() {
   }
 
   // =========================================================
+  // EVENTOS
+  // =========================================================
+
+  if (command === "events") {
+    const projectId = args[0];
+
+    if (!projectId) {
+      console.error(
+        "Uso: senior events <projeto> [limite]"
+      );
+
+      process.exit(1);
+    }
+
+    const limitArg = args[1]
+      ? Number(args[1])
+      : undefined;
+
+    const events =
+      await eventBus.list(
+        projectId,
+        {
+          limit: limitArg,
+        }
+      );
+
+    console.log(
+      `\nEVENTOS — ${projectId}`
+    );
+
+    console.log(
+      "--------------------------------"
+    );
+
+    if (events.length === 0) {
+      console.log(
+        "Nenhum evento registrado."
+      );
+    }
+
+    for (const event of events) {
+      const scope = [
+        event.taskId,
+        event.jobId,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      console.log(
+        `[${event.createdAt}] ${event.type}${scope ? ` (${scope})` : ""}`
+      );
+
+      console.log(
+        `  ${JSON.stringify(event.data)}`
+      );
+    }
+
+    console.log(
+      "--------------------------------\n"
+    );
+
+    return;
+  }
+
+  // =========================================================
   // EXECUTAR
   // =========================================================
 
@@ -1291,6 +1358,12 @@ JOBS
 
   job logs <jobId>
       Mostra a saída completa registrada pelo job.
+
+EVENTOS
+
+  events <projeto> [limite]
+      Lista os eventos estruturados registrados para o projeto
+      (project.created, task.started, validation.passed, etc.).
 
 SENIOR
 
