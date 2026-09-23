@@ -1090,71 +1090,100 @@ ValidationEngine
 
 # 22. Ponto exato em que o desenvolvimento parou
 
-O `ValidationEngine` acabou de ser conectado inicialmente ao
-`Orchestrator`.
+**Fase A (Validation Loop + Correction Loop) está completa e
+testada.** Os 14 itens da seção 24 foram implementados:
 
-No `executeTask()`:
+- `Orchestrator.runValidationLoop()` (privado, compartilhado entre
+  `executeTask()` e `correctTask()`) roda `ValidationEngine.runChecks()`,
+  avalia critérios semânticos via `SemanticValidator` (LLM read-only
+  julgando o diff real, não apenas o relato do agente) e persiste tudo
+  com `TaskManager.applyValidationResult()` **antes** de decidir o
+  status final da tarefa.
+- `TaskStatus` ganhou `VALIDATING`, `CORRECTION_REQUIRED`, `VALIDATED`,
+  `BLOCKED`. Tarefas sem `businessRules`/`acceptanceCriteria`/
+  `requiredChecks` continuam no fluxo antigo (`DONE` + liberação
+  imediata) — compatibilidade preservada.
+- `TaskManager.releaseReadyTasks()` só libera dependentes quando a
+  dependência está `DONE` (sem requisitos de validação) ou
+  `VALIDATED`. **Nunca com validação pendente.**
+- Correction Loop real: `Orchestrator.correctTask()` reexecuta o
+  agente no mesmo worktree com um prompt de correção construído a
+  partir do diagnóstico/critérios falhos da tentativa anterior, e
+  reavalia.
+- Estagnação: duas tentativas seguidas com o mesmo diagnóstico vão
+  direto para `BLOCKED` em vez de esgotar o `maxAttempts`.
+- `PlanValidator`: alerta estrutural quando uma tarefa backend/frontend
+  não tem Reviewer/QA dependente (item 13), e validação final do
+  objetivo do plano quando todas as tarefas estão `DONE`/`VALIDATED`
+  (item 14), chamada em `runProject()` e persistida em
+  `plan.validation`.
+- `createPlan()` já pede ao Chief `businessRules`/`acceptanceCriteria`/
+  `requiredChecks` por tarefa (opcionais).
 
-1.  agente executa;
-2.  GitManager cria commit;
-3.  se a task possuir requisitos de validação,
-    `ValidationEngine.runChecks()` é chamado;
-4.  ainda falta persistir o `validationResult.validation` usando
-    `TaskManager.setTaskValidation()`.
+Testado em `src/tests/orchestrator-validation-integration-test.ts`
+(runtimes falsos, sem rede: prova que o dependente fica `WAITING`
+durante `CORRECTION_REQUIRED` e só é liberado após `VALIDATED`, com 2
+tentativas registradas) e `src/tests/plan-validator-gates-test.ts`
+(gate Reviewer/QA, lógica pura).
 
-A integração ainda é **não bloqueante**.
+Dois bugs reais foram encontrados e corrigidos **pelo próprio teste de
+integração** — vale ler antes de mexer em Git/dependências:
 
-Hoje `finishTask()` ainda marca a tarefa como `DONE` e libera
-dependências.
-
-Isso precisa ser alterado gradualmente.
+1. `AgentExecutor.getDependencyContext()` ainda exigia
+   `status === "DONE"` literal; uma tarefa dependente de uma
+   `VALIDATED` travava para sempre. Corrigido para aceitar `DONE` OU
+   `VALIDATED`.
+2. `GitManager.isRepository()` usava
+   `git rev-parse --is-inside-work-tree`, que retorna `true` para
+   **qualquer** diretório dentro da árvore de um repositório
+   ancestral. Como o próprio repo do SENIOR agora é um repositório
+   git, todo projeto local em `projects/<id>` era tratado como já
+   inicializado e os comandos git da tarefa rodavam no repositório
+   ERRADO (o do SENIOR). Corrigido comparando `--show-toplevel` com o
+   próprio `projectPath`. **Se algum dia projects/ voltar a viver fora
+   da árvore do repo do SENIOR, teste esse caminho de novo.**
 
 ------------------------------------------------------------------------
 
 # 23. Próxima tarefa imediata
 
-Continuar a integração do Validation Loop.
+Fase A está pronta. A próxima etapa é a **Fase B — fortalecer
+ferramentas** (seção 24): adicionar `git status`/`git diff`/busca de
+texto/edição estruturada como ferramentas controladas para os agentes,
+evitando shell irrestrito.
 
-Primeiro:
+Antes de começar Fase B, vale um item que a Fase A deixou como dívida
+consciente (não bloqueante, mas real):
 
-``` text
-Orchestrator
-   ↓
-ValidationEngine.runChecks()
-   ↓
-TaskManager.setTaskValidation()
-```
-
-Persistir o resultado antes de `finishTask()`.
-
-Depois criar teste de integração.
-
-Não tornar validação bloqueante antes de provar persistência e
-recuperação.
+- `PlanValidator.validateObjective()` (validação final do plano, item
+  14) ainda não tem teste de integração com runtime falso — só o gate
+  Reviewer/QA (lógica pura) foi testado. Se for mexer nela, escreva
+  esse teste antes.
 
 ------------------------------------------------------------------------
 
 # 24. Sequência recomendada de desenvolvimento
 
-## Fase A --- finalizar Validation Loop
+## Fase A --- finalizar Validation Loop --- ✅ CONCLUÍDA
 
-1.  Persistir ValidationEngine no Orchestrator.
-2.  Criar teste de integração Orchestrator + Validation.
-3.  Fazer Planning gerar:
+1.  ✅ Persistir ValidationEngine no Orchestrator.
+2.  ✅ Criar teste de integração Orchestrator + Validation.
+3.  ✅ Fazer Planning gerar:
     -   businessRules;
     -   acceptanceCriteria;
     -   requiredChecks.
-4.  Criar avaliador semântico de acceptance criteria.
-5.  Registrar evidências.
-6.  Introduzir estados `VALIDATING` e `VALIDATED`.
-7.  Não liberar dependências antes de `VALIDATED`.
-8.  Criar `CORRECTION_REQUIRED`.
-9.  Criar Correction Loop.
-10. Limitar tentativas.
-11. Detectar estagnação.
-12. Criar `BLOCKED / NEEDS_HUMAN`.
-13. Adicionar Reviewer/QA como gates.
-14. Criar validação final do plano.
+4.  ✅ Criar avaliador semântico de acceptance criteria.
+5.  ✅ Registrar evidências.
+6.  ✅ Introduzir estados `VALIDATING` e `VALIDATED`.
+7.  ✅ Não liberar dependências antes de `VALIDATED`.
+8.  ✅ Criar `CORRECTION_REQUIRED`.
+9.  ✅ Criar Correction Loop.
+10. ✅ Limitar tentativas.
+11. ✅ Detectar estagnação.
+12. ✅ Criar `BLOCKED / NEEDS_HUMAN`.
+13. ✅ Adicionar Reviewer/QA como gates (advisory, ver seção 22).
+14. ✅ Criar validação final do plano (sem teste de integração próprio
+    ainda — ver dívida na seção 23).
 
 ## Fase B --- fortalecer ferramentas
 
@@ -1464,15 +1493,15 @@ base em um sistema confiável.
 A ordem imediata é:
 
 ``` text
-1. Persistir ValidationResult no Orchestrator
-2. Testar integração
-3. Fazer Planning gerar requisitos de validação
-4. Avaliar critérios semanticamente
-5. Tornar Validation bloqueante
-6. Correction Loop
-7. Reviewer/QA gates
-8. Plan-level Validation
-9. Memory
+1. Persistir ValidationResult no Orchestrator          ✅ FEITO
+2. Testar integração                                    ✅ FEITO
+3. Fazer Planning gerar requisitos de validação          ✅ FEITO
+4. Avaliar critérios semanticamente                      ✅ FEITO
+5. Tornar Validation bloqueante                          ✅ FEITO
+6. Correction Loop                                       ✅ FEITO
+7. Reviewer/QA gates                                     ✅ FEITO (advisory)
+8. Plan-level Validation                                 ✅ FEITO
+9. Memory                                                <- PRÓXIMO (Fase B/C)
 10. Jobs + Events
 11. API
 12. Frontend visual
