@@ -1086,6 +1086,39 @@ async function main() {
   }
 
   // =========================================================
+  // GATEWAY
+  // =========================================================
+
+  if (
+    command === "gateway" &&
+    args[0] === "start"
+  ) {
+    const port = args[1]
+      ? Number(args[1])
+      : 4000;
+
+    const { createGatewayServer } =
+      await import(
+        "../gateway/server.js"
+      );
+
+    const server =
+      createGatewayServer();
+
+    server.listen(port, () => {
+      console.log(
+        `\nSENIOR GATEWAY rodando em http://localhost:${port}`
+      );
+
+      console.log(
+        "Sem autenticação — pensado para uso local.\n"
+      );
+    });
+
+    return;
+  }
+
+  // =========================================================
   // EXECUTAR
   // =========================================================
 
@@ -1364,6 +1397,12 @@ EVENTOS
   events <projeto> [limite]
       Lista os eventos estruturados registrados para o projeto
       (project.created, task.started, validation.passed, etc.).
+
+GATEWAY
+
+  gateway start [porta]
+      Sobe a API HTTP local (padrão: porta 4000). Sem autenticação —
+      pensado para uso local/desenvolvimento.
 
 SENIOR
 

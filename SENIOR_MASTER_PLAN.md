@@ -1147,11 +1147,14 @@ integração** — vale ler antes de mexer em Git/dependências:
 
 # 23. Próxima tarefa imediata
 
-Fases A, B, C, D e E estão prontas. A próxima etapa é a **Fase F —
-API/Gateway** (seção 24): expor projetos, jobs, tarefas, agentes,
-eventos, approvals, logs e memória via HTTP (e depois WebSocket/SSE
-para os eventos em tempo real) — é o que permite um frontend (Fase G)
-existir sem precisar rodar a CLI localmente.
+Fases A a F estão prontas. A próxima etapa é a **Fase G — Frontend**
+(seção 17, 18, 24), a maior e mais aberta do roadmap: começar pela
+visualização de projetos (lista simples) antes de qualquer canvas —
+"não tente construir tudo de uma vez" vale ainda mais aqui do que nas
+fases anteriores. Ver seção 24 para a ordem sugerida dentro da própria
+Fase G (shell → lista de projetos → workspace → DAG → agentes →
+terminal visual → eventos → validation nodes → approvals → canvas
+infinito → timeline → command bar).
 
 Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
 
@@ -1376,18 +1379,57 @@ outro processo) e em
 também verifica que o fluxo real (execução + correção + validação)
 deixa o rastro de eventos esperado.
 
-## Fase F --- API / Gateway
+## Fase F --- API / Gateway --- ✅ CONCLUÍDA (REST; sem tempo real ainda)
 
-Expor:
+`createGatewayServer()` (`src/gateway/server.ts`) expõe o core via
+HTTP usando só `node:http` (sem framework — a superfície ainda é
+pequena o suficiente para não justificar Express/Fastify). Sem
+autenticação: pensado para localhost/desenvolvimento, não para expor
+publicamente.
 
--   projetos;
--   jobs;
--   tarefas;
--   agentes;
--   eventos;
--   approvals;
--   logs;
--   memória.
+```
+POST   /projects
+GET    /projects
+GET    /projects/:id
+GET    /projects/:id/plan
+POST   /projects/:id/plan                        (usa Chief/LLM)
+POST   /projects/:id/tasks/:taskId/execute       (usa Chief/LLM)
+POST   /projects/:id/tasks/:taskId/correct       (usa Chief/LLM)
+POST   /projects/:id/jobs
+GET    /jobs
+GET    /jobs/:jobId
+GET    /jobs/:jobId/logs
+GET    /projects/:id/events
+GET    /projects/:id/memory
+GET    /agents
+```
+
+-   ✅ projetos, jobs, tarefas (via plano), agentes (papéis lidos de
+    `agents/*/AGENT.md`), eventos, logs, memória — tudo da lista do
+    doc, exceto:
+-   ❌ **approvals**: não implementado, propositalmente. Não existe
+    mecanismo de approvals no core ainda (seção 19 nunca foi
+    construída) — expor uma rota que não faz nada seria pior que não
+    expor.
+-   `createGatewayServer(deps?)` aceita overrides de
+    `orchestrator`/`jobManager`/`eventBus`/`projectMemory`, o que
+    permitiu testar o fluxo completo (incluindo `POST
+    /projects/:id/jobs` → `GET /jobs/:jobId` até `DONE`) com um
+    runner de job falso injetado, sem depender de LLM real.
+-   **Sem tempo real ainda**: os eventos são só `GET` (poll). WebSocket
+    ou SSE para tempo real fica para quando o frontend (Fase G)
+    realmente precisar — não construir antes de ter um consumidor.
+
+CLI: `senior gateway start [porta]` (padrão 4000).
+
+Testado em `src/tests/gateway-test.ts`: sobe o servidor numa porta
+efêmera, cria projeto via HTTP, confere 404/200, confere que o evento
+`project.created` do core aparece via `/events`, lê `/memory`,
+`/agents`, e roda o ciclo completo de job via HTTP.
+
+Também corrigido nesta fase: `agents/*/AGENT.md` ainda tinham "JARVIS"
+no conteúdo (o rebrand anterior só cobriu `src/`) — apareceu ao testar
+`GET /agents` manualmente e foi corrigido.
 
 ## Fase G --- Frontend
 
@@ -1659,8 +1701,8 @@ A ordem imediata é:
 9. Memory (project memory)                               ✅ FEITO
 10. Jobs                                                 ✅ FEITO
 11. Events                                               ✅ FEITO
-12. API                                                  <- PRÓXIMO (Fase F)
-13. Frontend visual
+12. API                                                  ✅ FEITO (sem approvals, sem tempo real)
+13. Frontend visual                                      <- PRÓXIMO (Fase G)
 14. Paralelismo
 15. Alexa
 ```
