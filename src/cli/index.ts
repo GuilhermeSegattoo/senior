@@ -1,6 +1,8 @@
 import { Orchestrator } from "../core/Orchestrator.js";
+import { JobManager } from "../core/JobManager.js";
 
 const senior = new Orchestrator();
+const jobManager = new JobManager();
 
 const nomesAgentes: Record<string, string> = {
   architect: "ARQUITETO",
@@ -822,6 +824,201 @@ async function main() {
   }
 
   // =========================================================
+  // JOBS
+  // =========================================================
+
+  if (
+    command === "job" &&
+    args[0] === "start"
+  ) {
+    const projectId = args[1];
+
+    if (!projectId) {
+      console.error(
+        "Uso: senior job start <projeto>"
+      );
+
+      process.exit(1);
+    }
+
+    const job =
+      await jobManager.start(
+        projectId
+      );
+
+    console.log(
+      "\nJOB CRIADO"
+    );
+
+    console.log(
+      "--------------------------------"
+    );
+
+    console.log(`ID: ${job.id}`);
+    console.log(
+      `Projeto: ${job.projectId}`
+    );
+    console.log(
+      `Status: ${job.status}`
+    );
+    console.log(
+      `Log: ${job.logFile}`
+    );
+
+    console.log(
+      "--------------------------------\n"
+    );
+
+    console.log(
+      `Acompanhe com: npm run senior -- job status ${job.id}\n`
+    );
+
+    return;
+  }
+
+  if (
+    command === "job" &&
+    args[0] === "status"
+  ) {
+    const jobId = args[1];
+
+    if (!jobId) {
+      console.error(
+        "Uso: senior job status <jobId>"
+      );
+
+      process.exit(1);
+    }
+
+    await jobManager.reconcile();
+
+    const job = await jobManager.get(
+      jobId
+    );
+
+    if (!job) {
+      console.error(
+        `Job ${jobId} não encontrado.`
+      );
+
+      process.exit(1);
+    }
+
+    console.log(
+      "\nSTATUS DO JOB"
+    );
+
+    console.log(
+      "--------------------------------"
+    );
+
+    console.log(`ID: ${job.id}`);
+    console.log(
+      `Projeto: ${job.projectId}`
+    );
+    console.log(
+      `Status: ${job.status}`
+    );
+    console.log(
+      `Criado em: ${job.createdAt}`
+    );
+
+    if (job.startedAt) {
+      console.log(
+        `Iniciado em: ${job.startedAt}`
+      );
+    }
+
+    if (job.completedAt) {
+      console.log(
+        `Concluído em: ${job.completedAt}`
+      );
+    }
+
+    if (job.error) {
+      console.log(
+        `Erro: ${job.error}`
+      );
+    }
+
+    if (job.result) {
+      console.log(
+        `Resultado: ${JSON.stringify(job.result, null, 2)}`
+      );
+    }
+
+    console.log(
+      "--------------------------------\n"
+    );
+
+    return;
+  }
+
+  if (
+    command === "job" &&
+    args[0] === "list"
+  ) {
+    const projectId = args[1];
+
+    const jobs =
+      await jobManager.list(
+        projectId
+      );
+
+    console.log(
+      "\nJOBS"
+    );
+
+    console.log(
+      "--------------------------------"
+    );
+
+    if (jobs.length === 0) {
+      console.log(
+        "Nenhum job encontrado."
+      );
+    }
+
+    for (const job of jobs) {
+      console.log(
+        `[${job.status}] ${job.id} | projeto: ${job.projectId} | criado em ${job.createdAt}`
+      );
+    }
+
+    console.log(
+      "--------------------------------\n"
+    );
+
+    return;
+  }
+
+  if (
+    command === "job" &&
+    args[0] === "logs"
+  ) {
+    const jobId = args[1];
+
+    if (!jobId) {
+      console.error(
+        "Uso: senior job logs <jobId>"
+      );
+
+      process.exit(1);
+    }
+
+    const log =
+      await jobManager.readLog(
+        jobId
+      );
+
+    console.log(
+      log || "(log vazio)"
+    );
+
+    return;
+  }
+
+  // =========================================================
   // EXECUTAR
   // =========================================================
 
@@ -1078,6 +1275,22 @@ EXECUÇÃO
 
   concluir <projeto> <tarefa>
       Marca manualmente uma tarefa como concluída.
+
+JOBS
+
+  job start <projeto>
+      Inicia a execução autônoma do plano em background (processo
+      destacado). Não bloqueia o terminal; sobrevive ao fechamento
+      da CLI.
+
+  job status <jobId>
+      Mostra o status atual de um job.
+
+  job list [projeto]
+      Lista jobs, opcionalmente filtrados por projeto.
+
+  job logs <jobId>
+      Mostra a saída completa registrada pelo job.
 
 SENIOR
 

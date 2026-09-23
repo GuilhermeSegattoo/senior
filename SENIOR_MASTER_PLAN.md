@@ -1147,12 +1147,13 @@ integração** — vale ler antes de mexer em Git/dependências:
 
 # 23. Próxima tarefa imediata
 
-Fases A, B e C (project memory) estão prontas. A próxima etapa é a
-**Fase D — Jobs** (seção 24): Senior ainda executa tudo de forma
-síncrona (a chamada `jarvis run` fica presa até o ciclo acabar). Criar
-um `JobManager` persistente é o que permite fechar a CLI/UI sem
-perder a execução, rodar vários projetos ao mesmo tempo, e mais tarde
-dar suporte a Alexa/Web disparando trabalhos longos.
+Fases A, B, C e D estão prontas. A próxima etapa é a **Fase E — Event
+Bus** (seção 24 e 16): hoje o único jeito de acompanhar um job rodando
+é chamar `senior job status <jobId>` repetidamente (polling) ou ler o
+log bruto. Um event bus com eventos estruturados
+(`task.started`, `tool.completed`, `validation.failed`, etc.) é o que
+vai alimentar terminal visual/canvas/timeline mais tarde (Fase G) sem
+depender de "scraping" de log.
 
 Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
 
@@ -1266,12 +1267,56 @@ necessidade).
 Testado em `src/tests/project-memory-test.ts`: cria estrutura padrão,
 prova que conteúdo humano nunca é sobrescrito, grava e lê uma decisão.
 
-## Fase D --- Jobs
+## Fase D --- Jobs --- ✅ CONCLUÍDA
 
-Criar JobManager persistente.
+`JobManager` (`src/core/JobManager.ts`) persiste jobs em
+`data/jobs/<jobId>.json` (um arquivo por job — não um array
+compartilhado, ver motivo abaixo) e `data/jobs/logs/<jobId>.log`.
 
-Senior precisa conseguir executar trabalhos longos independentemente da
-CLI.
+-   ✅ `start(projectId)` cria o registro do job (`PENDING`) e dispara
+    um processo Node **destacado** (`spawn(..., {detached:true})` +
+    `unref()`) que roda `Orchestrator.runProject()` de forma
+    independente (`src/jobs/runJob.ts`). `start()` retorna na hora —
+    a CLI não fica bloqueada e o processo continua mesmo que o
+    terminal que chamou seja fechado.
+-   ✅ O processo destacado atualiza o próprio job
+    (`markRunning`/`markCompleted`/`markFailed`) conforme progride.
+-   ✅ `reconcile()` implementa "recuperar após falhas": detecta jobs
+    presos em `RUNNING` cujo processo (pid) já morreu (crash, reinício
+    da máquina) e os marca `FAILED` com motivo explícito, em vez de
+    deixá-los "rodando" para sempre. Chamado automaticamente em
+    `senior job status`.
+-   ✅ CLI: `job start <projeto>`, `job status <jobId>`,
+    `job list [projeto]`, `job logs <jobId>`.
+
+Dois problemas reais de Windows apareceram e foram corrigidos:
+
+1. `spawn("npx", ...)` falha com `ENOENT` no Windows sem
+   `shell:true` (npx é um shim `.cmd`) — e `shell:true` traz risco de
+   escaping (Node emite `DEP0190`). Corrigido invocando
+   `node <caminho-para-tsx/dist/cli.mjs> <script> <jobId>`
+   diretamente — multiplataforma, sem shell.
+2. **Corrupção real de dados**: a primeira versão usava um único
+   `data/jobs.json` com toda a lista de jobs. O processo pai (que
+   chama `start()`/`get()`) e o processo destacado do job (que chama
+   `markRunning()`/`markCompleted()`) escrevem quase ao mesmo tempo —
+   e duas escritas concorrentes no MESMO arquivo corrompiam o JSON
+   inteiro (`JSON.parse` falhando em conteúdo parcialmente escrito),
+   derrubando qualquer leitura de QUALQUER job. Corrigido migrando
+   para um arquivo por job + escrita atômica (grava em `.tmp-<uuid>`
+   e usa `rename()`, que é atômico no mesmo filesystem) — um leitor
+   nunca vê um arquivo pela metade. Reproduzido de forma flaky em ~1
+   a cada poucas execuções do teste antes do fix; 0 falhas em várias
+   rodadas depois.
+-   ✅ `child.on("error", ...)` no processo spawnado: sem isso, uma
+    falha ao sequer iniciar o processo (binário ausente) derrubava
+    quem chamou `start()` com um "Unhandled 'error' event" em vez de
+    apenas marcar o job como `FAILED`.
+
+Testado em `src/tests/job-manager-test.ts`: ciclo completo
+start→running→completed com processo real destacado (sem depender de
+LLM — usa um runner falso injetável), captura de log, `list()`,
+`reconcile()` de job travado, e o guard de erro de spawn.
 
 ## Fase E --- Event Bus
 
@@ -1557,12 +1602,13 @@ A ordem imediata é:
 6. Correction Loop                                       ✅ FEITO
 7. Reviewer/QA gates                                     ✅ FEITO (advisory)
 8. Plan-level Validation                                 ✅ FEITO
-9. Memory                                                <- PRÓXIMO (Fase B/C)
-10. Jobs + Events
-11. API
-12. Frontend visual
-13. Paralelismo
-14. Alexa
+9. Memory (project memory)                               ✅ FEITO
+10. Jobs                                                 ✅ FEITO
+11. Events                                               <- PRÓXIMO (Fase E)
+12. API
+13. Frontend visual
+14. Paralelismo
+15. Alexa
 ```
 
 Qualquer alteração deve preservar o que já funciona e aproximar o
