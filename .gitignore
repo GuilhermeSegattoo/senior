@@ -1,0 +1,69 @@
+# ============================================================
+# SENIOR — Git Ignore
+# ============================================================
+
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local authentication / credentials
+auth.json
+credentials.json
+secrets.json
+.aws/
+.ssh/
+
+# Senior runtime data
+data/
+
+# Local projects managed by Senior
+projects/
+
+# Experiments / spikes
+experiments/
+
+# Build outputs
+dist/
+build/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local AI / agent state
+.codex/
+.claude/
+.pi/
+
+# Misc
+*.local
