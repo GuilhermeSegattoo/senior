@@ -1147,9 +1147,12 @@ integração** — vale ler antes de mexer em Git/dependências:
 
 # 23. Próxima tarefa imediata
 
-Fases A e B estão prontas. A próxima etapa é a **Fase C — memória**
-(seção 24): criar `.senior/` por projeto (`PROJECT.md`,
-`ARCHITECTURE.md`, `CONVENTIONS.md`, `decisions/`, `knowledge/`).
+Fases A, B e C (project memory) estão prontas. A próxima etapa é a
+**Fase D — Jobs** (seção 24): Senior ainda executa tudo de forma
+síncrona (a chamada `jarvis run` fica presa até o ciclo acabar). Criar
+um `JobManager` persistente é o que permite fechar a CLI/UI sem
+perder a execução, rodar vários projetos ao mesmo tempo, e mais tarde
+dar suporte a Alexa/Web disparando trabalhos longos.
 
 Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
 
@@ -1157,13 +1160,18 @@ Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
   14 da Fase A) ainda não tem teste de integração com runtime falso —
   só o gate Reviewer/QA (lógica pura) foi testado. Se for mexer nela,
   escreva esse teste antes.
-- As nove novas ferramentas (`git_status`, `git_diff`,
+- As cinco novas ferramentas da Fase B (`git_status`, `git_diff`,
   `search_project_files`, `edit_project_file`,
   `inspect_package_json`) só são injetadas no `PiRuntime`
   (`createPiProjectTools`). O `CodexRuntime` usa as ferramentas
   nativas do Codex CLI via `CodexAdapter` e não passa por elas — isso
   é intencional (Safe Tool Layer é específica do Pi), não um
   esquecimento.
+- Global memory (conhecimento compartilhado entre projetos, seção 14)
+  não foi implementada — só project memory (`.senior/`) existe hoje.
+- `knowledge/` (dentro de `.senior/`) existe como estrutura, mas nada
+  escreve nela automaticamente ainda — só `decisions/` é populado
+  pelo Orchestrator.
 
 ------------------------------------------------------------------------
 
@@ -1215,17 +1223,48 @@ validam caminho via `WorkspaceGuard` antes de qualquer chamada `execFile`.
 Testado em `src/tests/fase-b-tools-test.ts` (workspace git temporário
 real, sem rede).
 
-## Fase C --- memória
+## Fase C --- memória --- ✅ CONCLUÍDA (project memory)
 
-Criar `.senior/` por projeto.
+`ProjectMemory` (`src/core/ProjectMemory.ts`) cria e lê `.senior/` a
+partir de `project.path` (o repositório PRINCIPAL do projeto, não o
+worktree isolado da tarefa — agentes não têm acesso de filesystem a
+`project.path`, só ao próprio worktree):
 
-Registrar:
+```
+.senior/
+├── PROJECT.md        # curado por humano/agente, Senior nunca sobrescreve
+├── ARCHITECTURE.md    # idem
+├── CONVENTIONS.md      # idem
+├── decisions/          # populado automaticamente pelo Orchestrator
+└── knowledge/          # reservado para uso futuro/manual
+```
 
--   arquitetura;
--   decisões;
--   convenções;
--   conhecimento;
--   histórico relevante.
+-   ✅ `AgentExecutor.execute()` injeta o conteúdo de `.senior/` (os
+    três `.md` + decisões/conhecimento recentes, truncado a ~12k
+    caracteres) como seção `# MEMÓRIA DO PROJETO` no prompt de TODA
+    tarefa — já é isso que dá ao agente contexto arquitetural sem
+    precisar redescobrir tudo a cada execução.
+-   ✅ `Orchestrator.maybeRecordDecision()` grava automaticamente um
+    arquivo em `decisions/` (task id, agente, objetivo, tarefa,
+    commit, resultado relatado) sempre que uma tarefa termina em
+    `DONE` (sem validação) ou `VALIDATED`. **Deliberadamente não**
+    tenta extrair "decisões"/"conhecimento" do texto livre do agente
+    via outra chamada de LLM — seria frágil; o histórico de tentativas
+    falhas já vive em `task.validation`, memória não duplica isso.
+-   ✅ `PROJECT.md`/`ARCHITECTURE.md`/`CONVENTIONS.md` são só lidos
+    pelo Senior, nunca escritos automaticamente — continuam sendo
+    território do humano (ou de um agente rodando fora do fluxo
+    automático).
+-   `knowledge/` existe (estrutura criada) mas nada escreve nela
+    ainda automaticamente — fica como extensão manual/futura.
+
+Global memory (políticas/padrões compartilhados entre projetos, seção
+14) **não foi implementada** nesta fase — ficou de fora por não ter
+demanda real ainda (o próprio doc diz para só migrar quando houver
+necessidade).
+
+Testado em `src/tests/project-memory-test.ts`: cria estrutura padrão,
+prova que conteúdo humano nunca é sobrescrito, grava e lê uma decisão.
 
 ## Fase D --- Jobs
 

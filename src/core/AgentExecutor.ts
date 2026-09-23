@@ -9,6 +9,7 @@ import type {
 
 import { TaskManager } from "./TaskManager.js";
 import { ProjectManager } from "./ProjectManager.js";
+import { ProjectMemory } from "./ProjectMemory.js";
 
 import type {
   AgentRole,
@@ -24,6 +25,7 @@ export class AgentExecutor {
   private readonly runtime: AgentRuntime;
   private readonly taskManager = new TaskManager();
   private readonly projectManager = new ProjectManager();
+  private readonly projectMemory = new ProjectMemory();
 
   constructor(
     runtime?: AgentRuntime
@@ -175,6 +177,16 @@ ${dependency.result ?? "Nenhum resultado registrado."}
         ? `${project.repository.owner}/${project.repository.name}`
         : "Nenhum repositório GitHub associado.";
 
+    /*
+     * Memória do projeto vive em project.path (.senior/), fora do
+     * worktree isolado da tarefa — por isso é injetada como texto
+     * em vez de exposta como ferramenta de leitura direta.
+     */
+    const projectMemoryContext =
+      await this.projectMemory.readContext(
+        project.path
+      );
+
     const prompt = `
 ${instructions}
 
@@ -182,6 +194,10 @@ ${instructions}
 
 Nome: ${project.name}
 ID: ${project.id}
+
+# MEMÓRIA DO PROJETO
+
+${projectMemoryContext}
 
 # REPOSITÓRIO
 

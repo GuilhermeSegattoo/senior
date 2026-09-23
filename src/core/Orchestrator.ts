@@ -10,6 +10,7 @@ import { GitManager } from "./GitManager.js";
 import { ValidationEngine } from "./ValidationEngine.js";
 import { SemanticValidator } from "./SemanticValidator.js";
 import { PlanValidator } from "./PlanValidator.js";
+import { ProjectMemory } from "./ProjectMemory.js";
 
 import type {
   ExecutionPlan,
@@ -20,6 +21,10 @@ import type {
   TaskValidation,
 } from "../types/Validation.js";
 
+import type {
+  Project,
+} from "../types/Project.js";
+
 export class Orchestrator {
   private codex = new CodexAdapter();
   private taskManager = new TaskManager();
@@ -28,6 +33,7 @@ export class Orchestrator {
     new IntegrationManager();
   private gitManager = new GitManager();
 private validationEngine = new ValidationEngine();
+private projectMemory = new ProjectMemory();
 
 /*
  * Não privados de propósito: testes de integração injetam
@@ -460,6 +466,22 @@ Regras:
             commitResult.headCommit,
         });
 
+      await this.maybeRecordDecision(
+        {
+          project,
+          task,
+          result,
+          objective:
+            plan.objective,
+          validationOutcome,
+          commit:
+            commitResult.commit ??
+            undefined,
+          headCommit:
+            commitResult.headCommit,
+        }
+      );
+
       return {
         project,
         task,
@@ -649,6 +671,22 @@ Regras:
             commitResult.headCommit,
         });
 
+      await this.maybeRecordDecision(
+        {
+          project,
+          task,
+          result,
+          objective:
+            plan.objective,
+          validationOutcome,
+          commit:
+            commitResult.commit ??
+            undefined,
+          headCommit:
+            commitResult.headCommit,
+        }
+      );
+
       return {
         project,
         task,
@@ -688,6 +726,60 @@ Regras:
 
       throw error;
     }
+  }
+
+  /*
+   * Registra automaticamente a tarefa em .senior/decisions/ quando
+   * ela termina em um estado de sucesso real: DONE (sem requisitos
+   * de validação) ou VALIDATED. CORRECTION_REQUIRED e BLOCKED não
+   * geram registro — o histórico de tentativas já vive em
+   * task.validation, memória não deve duplicar isso.
+   */
+  private async maybeRecordDecision(
+    params: {
+      project: Project;
+      task: ManagedTask;
+      result: string;
+      objective: string;
+      validationOutcome:
+        | {
+            status:
+              | "VALIDATED"
+              | "CORRECTION_REQUIRED"
+              | "BLOCKED";
+            validation: TaskValidation;
+          }
+        | null;
+      commit?: string;
+      headCommit?: string;
+    }
+  ): Promise<void> {
+    const status =
+      params.validationOutcome
+        ?.status ?? "DONE";
+
+    if (
+      status !== "DONE" &&
+      status !== "VALIDATED"
+    ) {
+      return;
+    }
+
+    await this.projectMemory.recordTaskDecision(
+      params.project.path,
+      {
+        taskId: params.task.id,
+        agent: params.task.agent,
+        objective:
+          params.objective,
+        task: params.task.task,
+        result: params.result,
+        status,
+        commit: params.commit,
+        headCommit:
+          params.headCommit,
+      }
+    );
   }
 
   private buildCorrectionContext(
