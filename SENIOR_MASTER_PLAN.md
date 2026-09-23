@@ -1147,18 +1147,23 @@ integração** — vale ler antes de mexer em Git/dependências:
 
 # 23. Próxima tarefa imediata
 
-Fase A está pronta. A próxima etapa é a **Fase B — fortalecer
-ferramentas** (seção 24): adicionar `git status`/`git diff`/busca de
-texto/edição estruturada como ferramentas controladas para os agentes,
-evitando shell irrestrito.
+Fases A e B estão prontas. A próxima etapa é a **Fase C — memória**
+(seção 24): criar `.senior/` por projeto (`PROJECT.md`,
+`ARCHITECTURE.md`, `CONVENTIONS.md`, `decisions/`, `knowledge/`).
 
-Antes de começar Fase B, vale um item que a Fase A deixou como dívida
-consciente (não bloqueante, mas real):
+Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
 
 - `PlanValidator.validateObjective()` (validação final do plano, item
-  14) ainda não tem teste de integração com runtime falso — só o gate
-  Reviewer/QA (lógica pura) foi testado. Se for mexer nela, escreva
-  esse teste antes.
+  14 da Fase A) ainda não tem teste de integração com runtime falso —
+  só o gate Reviewer/QA (lógica pura) foi testado. Se for mexer nela,
+  escreva esse teste antes.
+- As nove novas ferramentas (`git_status`, `git_diff`,
+  `search_project_files`, `edit_project_file`,
+  `inspect_package_json`) só são injetadas no `PiRuntime`
+  (`createPiProjectTools`). O `CodexRuntime` usa as ferramentas
+  nativas do Codex CLI via `CodexAdapter` e não passa por elas — isso
+  é intencional (Safe Tool Layer é específica do Pi), não um
+  esquecimento.
 
 ------------------------------------------------------------------------
 
@@ -1185,18 +1190,30 @@ consciente (não bloqueante, mas real):
 14. ✅ Criar validação final do plano (sem teste de integração próprio
     ainda — ver dívida na seção 23).
 
-## Fase B --- fortalecer ferramentas
+## Fase B --- fortalecer ferramentas --- ✅ CONCLUÍDA
 
-Adicionar ferramentas controladas para:
+-   ✅ `git_status` (`GitStatusTool`);
+-   ✅ `git_diff`, opcionalmente restrito a um caminho (`GitDiffTool`);
+-   ✅ busca de texto (`SearchProjectFilesTool` — varredura própria,
+    sem depender de grep/rg instalado);
+-   ✅ edição estruturada (`EditProjectFileTool` — troca um trecho
+    exato em vez de reescrever o arquivo inteiro; reaproveita
+    Read/WriteProjectFileTool);
+-   ✅ inspeção de package.json (`InspectPackageJsonTool` — resumo
+    estruturado: nome, scripts, dependencies/devDependencies);
+-   ✅ checks configurados por projeto: `RunProjectCheckTool` agora
+    confere se o script (`test`/`lint`/`build`) existe no
+    `package.json` do workspace antes de rodá-lo, em vez de assumir
+    que todo projeto tem os três. `typecheck` continua fixo (`tsc
+    --noEmit`, não depende de script). Também removida a suposição
+    de que `test` sempre usa Jest (`--runInBand`).
 
--   git status;
--   git diff;
--   busca de texto;
--   edição estruturada;
--   inspeção de package.json;
--   checks configurados por projeto.
+Todas as ferramentas continuam sem shell irrestrito: nenhum argumento
+livre do modelo vira comando de shell — `git_diff`/`search_project_files`
+validam caminho via `WorkspaceGuard` antes de qualquer chamada `execFile`.
 
-Evitar shell irrestrito.
+Testado em `src/tests/fase-b-tools-test.ts` (workspace git temporário
+real, sem rede).
 
 ## Fase C --- memória
 
