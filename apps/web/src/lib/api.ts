@@ -244,9 +244,20 @@ export async function fetchPlan(
   }
 }
 
+export type Provider =
+  | "codex"
+  | "claude"
+  | "pi";
+
+export interface ModelSelection {
+  provider?: Provider;
+  model?: string;
+}
+
 export async function createPlan(
   projectId: string,
-  objective: string
+  objective: string,
+  selection: ModelSelection = {}
 ): Promise<ManagedPlan> {
   const data = await request<{
     plan: ManagedPlan;
@@ -258,10 +269,69 @@ export async function createPlan(
     },
     body: JSON.stringify({
       objective,
+      ...selection,
     }),
   });
 
   return data.plan;
+}
+
+export interface TaskExecution {
+  task: ManagedTask;
+  validation?: {
+    status:
+      | "VALIDATED"
+      | "CORRECTION_REQUIRED"
+      | "BLOCKED";
+  };
+}
+
+export async function executeTaskApi(
+  projectId: string,
+  taskId: string,
+  selection: ModelSelection = {}
+): Promise<TaskExecution> {
+  const data = await request<{
+    execution: TaskExecution;
+  }>(
+    `/projects/${projectId}/tasks/${taskId}/execute`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify(
+        selection
+      ),
+    }
+  );
+
+  return data.execution;
+}
+
+export async function correctTaskApi(
+  projectId: string,
+  taskId: string,
+  selection: ModelSelection = {}
+): Promise<TaskExecution> {
+  const data = await request<{
+    execution: TaskExecution;
+  }>(
+    `/projects/${projectId}/tasks/${taskId}/correct`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify(
+        selection
+      ),
+    }
+  );
+
+  return data.execution;
 }
 
 export type JobStatus =

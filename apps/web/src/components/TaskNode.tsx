@@ -6,7 +6,7 @@ import {
 } from "@xyflow/react";
 import type { TaskStatus } from "@/lib/api";
 
-const AGENT_LABEL: Record<
+export const AGENT_LABEL: Record<
   string,
   string
 > = {
@@ -132,6 +132,33 @@ export function TaskNode({
           {style.label}
         </span>
       </div>
+    </div>
+  );
+}
+
+export interface LaneLabelData
+  extends Record<
+    string,
+    unknown
+  > {
+  agent: string;
+}
+
+export type LaneLabelFlowNode =
+  Node<LaneLabelData, "lane">;
+
+/*
+ * Rótulo de raia (ex.: "BACKEND", "FRONTEND") fixado à esquerda do
+ * canvas, alinhado com a linha daquele agente — não é arrastável
+ * nem clicável, só orientação visual.
+ */
+export function LaneLabelNode({
+  data,
+}: NodeProps<LaneLabelFlowNode>) {
+  return (
+    <div className="w-40 select-none font-mono text-xs uppercase tracking-wider text-mute">
+      {AGENT_LABEL[data.agent] ??
+        data.agent.toUpperCase()}
     </div>
   );
 }

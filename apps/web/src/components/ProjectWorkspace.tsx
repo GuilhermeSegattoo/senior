@@ -20,13 +20,24 @@ import {
   type ManagedPlan,
   type Project,
 } from "@/lib/api";
-import { layoutTasks } from "@/lib/layout";
+import {
+  getAgentLanes,
+  layoutTasks,
+} from "@/lib/layout";
 import {
   TaskNode,
+  LaneLabelNode,
   type TaskFlowNode,
+  type LaneLabelFlowNode,
 } from "@/components/TaskNode";
+import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 
-const nodeTypes = { task: TaskNode };
+const nodeTypes = {
+  task: TaskNode,
+  lane: LaneLabelNode,
+};
+
+const LANE_LABEL_X = -260;
 const POLL_INTERVAL_MS = 3000;
 
 type Loadable<T> =
@@ -63,6 +74,13 @@ export function ProjectWorkspace({
 
   const [startingJob, setStartingJob] =
     useState(false);
+
+  const [
+    selectedTaskId,
+    setSelectedTaskId,
+  ] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -142,7 +160,10 @@ export function ProjectWorkspace({
         plan === "loading"
       ) {
         return {
-          nodes: [] as TaskFlowNode[],
+          nodes: [] as (
+            | TaskFlowNode
+            | LaneLabelFlowNode
+          )[],
           edges: [] as Edge[],
         };
       }
@@ -150,7 +171,7 @@ export function ProjectWorkspace({
       const positions =
         layoutTasks(plan.tasks);
 
-      const nodes: TaskFlowNode[] =
+      const taskNodes: TaskFlowNode[] =
         plan.tasks.map((task) => ({
           id: task.id,
           type: "task" as const,
@@ -166,6 +187,28 @@ export function ProjectWorkspace({
             status: task.status,
           },
         }));
+
+      const laneNodes: LaneLabelFlowNode[] =
+        getAgentLanes(
+          plan.tasks
+        ).map((lane) => ({
+          id: `lane-${lane.agent}`,
+          type: "lane" as const,
+          position: {
+            x: LANE_LABEL_X,
+            y: lane.y,
+          },
+          draggable: false,
+          selectable: false,
+          data: {
+            agent: lane.agent,
+          },
+        }));
+
+      const nodes = [
+        ...laneNodes,
+        ...taskNodes,
+      ];
 
       const edges: Edge[] =
         plan.tasks.flatMap(
@@ -245,6 +288,17 @@ export function ProjectWorkspace({
       setStartingJob(false);
     }
   }
+
+  const selectedTask =
+    plan &&
+    plan !== "loading" &&
+    selectedTaskId
+      ? (plan.tasks.find(
+          (task) =>
+            task.id ===
+            selectedTaskId
+        ) ?? null)
+      : null;
 
   if (project === "loading") {
     return (
@@ -386,6 +440,19 @@ export function ProjectWorkspace({
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
+              onNodeClick={(
+                _event,
+                node
+              ) => {
+                if (
+                  node.type ===
+                  "task"
+                ) {
+                  setSelectedTaskId(
+                    node.id
+                  );
+                }
+              }}
               fitView
               proOptions={{
                 hideAttribution:
@@ -401,6 +468,19 @@ export function ProjectWorkspace({
             </ReactFlow>
           )}
       </div>
+
+      {selectedTask && (
+        <TaskDetailPanel
+          projectId={projectId}
+          task={selectedTask}
+          onClose={() =>
+            setSelectedTaskId(null)
+          }
+          onChanged={() =>
+            setSelectedTaskId(null)
+          }
+        />
+      )}
     </div>
   );
 }
