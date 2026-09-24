@@ -375,3 +375,24 @@ export async function fetchJob(
 
   return data.job;
 }
+
+export async function askChief(
+  message: string,
+  selection: ModelSelection = {}
+): Promise<string> {
+  const data = await request<{
+    response: string;
+  }>("/chief/ask", {
+    method: "POST",
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+    body: JSON.stringify({
+      message,
+      ...selection,
+    }),
+  });
+
+  return data.response;
+}

@@ -263,6 +263,48 @@ export function createGatewayServer(
   );
 
   // =========================================================
+  // CHIEF (chat central, cross-project)
+  // =========================================================
+
+  route(
+    "POST",
+    "/chief/ask",
+    async (req, res) => {
+      const body =
+        (await readJsonBody(
+          req
+        )) as {
+          message?: string;
+          provider?: RuntimeName;
+          model?: string;
+        };
+
+      if (!body.message) {
+        sendJson(res, 400, {
+          error:
+            "Campo obrigatório: message",
+        });
+
+        return;
+      }
+
+      const response =
+        await orchestrator.talkToChief(
+          body.message,
+          {
+            provider:
+              body.provider,
+            model: body.model,
+          }
+        );
+
+      sendJson(res, 200, {
+        response,
+      });
+    }
+  );
+
+  // =========================================================
   // FILESYSTEM (para o fluxo de importar projeto de uma pasta)
   // =========================================================
 

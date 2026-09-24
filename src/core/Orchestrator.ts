@@ -89,12 +89,35 @@ planValidator = new PlanValidator();
     const instructions =
       await this.getChiefInstructions();
 
+    const projects =
+      await this.projectManager.list();
+
+    const projectsContext =
+      projects.length > 0
+        ? projects
+            .map(
+              (project) =>
+                `- ${project.name} (id: ${project.id}, status: ${project.status})`
+            )
+            .join("\n")
+        : "Nenhum projeto cadastrado ainda.";
+
     const prompt = `
 ${instructions}
+
+# Projetos cadastrados no Senior
+
+${projectsContext}
 
 # Solicitação do usuário
 
 ${message}
+
+Se a solicitação se referir a um projeto específico da lista acima,
+identifique-o pelo nome. Você ainda não consegue criar planos ou
+disparar execuções diretamente por esta conversa — nesse caso,
+explique qual seria o próximo passo (ex.: "crie um plano para o
+projeto X com o objetivo Y").
 
 Responda como SENIOR.
 `;

@@ -61,6 +61,7 @@ export class CodexAdapter {
       let finalResponse = "";
       let stderr = "";
       let settled = false;
+      let reportedError: string | undefined;
 
       const rl = createInterface({
         input: child.stdout,
@@ -85,6 +86,23 @@ export class CodexAdapter {
             if (typeof text === "string") {
               finalResponse = text;
             }
+          }
+
+          /*
+           * Eventos de erro do Codex vêm num formato diferente
+           * ({"msg":{"type":"error",...}}, não "type" direto) — sem
+           * isso, uma falha real (ex.: token OAuth expirado) ficava
+           * escondida atrás de uma mensagem genérica de "nenhuma
+           * resposta encontrada".
+           */
+          if (
+            event.msg?.type ===
+              "error" &&
+            typeof event.msg
+              .message === "string"
+          ) {
+            reportedError =
+              event.msg.message;
           }
         } catch {
           // Ignora linhas que não sejam JSON válido.
@@ -139,7 +157,11 @@ export class CodexAdapter {
         if (!finalResponse) {
           reject(
             new Error(
-              `Codex terminou, mas nenhuma resposta final foi encontrada.\n${stderr}`
+              `Codex terminou, mas nenhuma resposta final foi encontrada.${
+                reportedError
+                  ? `\nErro reportado pelo Codex: ${reportedError}`
+                  : ""
+              }\n${stderr}`
             )
           );
           return;

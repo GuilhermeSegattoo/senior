@@ -7,6 +7,7 @@ import {
 } from "next/font/google";
 import "./globals.css";
 import { GatewayStatus } from "@/components/GatewayStatus";
+import { ChiefChat } from "@/components/ChiefChat";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -68,6 +69,8 @@ export default function RootLayout({
         <main className="blueprint-grid min-h-0 flex-1 overflow-y-auto">
           {children}
         </main>
+
+        <ChiefChat />
       </body>
     </html>
   );
