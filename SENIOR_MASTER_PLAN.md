@@ -451,6 +451,24 @@ testando manualmente antes de considerar a integração pronta;
 documentado como comentário no próprio adapter para não ser
 reintroduzido.
 
+**Achado de segurança real (revisão automática) na primeira versão do
+`ClaudeAdapter`**: para não travar esperando confirmação interativa
+(não existe humano para responder), tarefas `workspace-write` usavam
+`--permission-mode bypassPermissions`. Testado manualmente e
+confirmado: `bypassPermissions` ignora `--allowedTools` por completo
+— um comando Bash fora da lista permitida ainda executava (provado
+pedindo o hostname real da máquina, que só sai rodando `hostname` de
+verdade). Ou seja, a tarefa tinha shell irrestrito de verdade,
+violando o princípio da seção 9 ("agentes não devem receber shell
+irrestrito"). Corrigido trocando para `--permission-mode acceptEdits`
++ `--disallowedTools Bash WebFetch WebSearch` — essa combinação
+**bloqueia de verdade** (mesmo teste do hostname real confirma o
+bloqueio) sem travar Edit/Write. Bash de verificação não faz falta
+aqui: o Validation Loop (Fase A) já roda typecheck/test/lint/build de
+forma determinística depois, independente do que o agente relatou.
+Travado com teste real em
+`src/tests/claude-adapter-security-test.ts`.
+
 Pi é um motor abaixo do Senior. Ele não substitui:
 
 -   ProjectManager;

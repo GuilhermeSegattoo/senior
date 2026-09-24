@@ -66,11 +66,33 @@ export class ClaudeAdapter {
           options.cwd ??
           process.cwd();
 
-        const permissionMode =
+        const isWorkspaceWrite =
           (options.sandbox ??
             "read-only") ===
-          "workspace-write"
-            ? "bypassPermissions"
+          "workspace-write";
+
+        /*
+         * "bypassPermissions" foi testado e descartado: ele ignora
+         * --allowedTools completamente (confirmado empiricamente —
+         * um Bash fora da lista ainda executa), então não restringe
+         * nada de verdade, apenas evita os prompts interativos que
+         * travariam a execução automatizada (não há humano para
+         * responder).
+         *
+         * "acceptEdits" também não bloqueia, mas combinado com
+         * --disallowedTools (esse SIM restringe de verdade,
+         * confirmado testando com "hostname" via Bash) dá o mesmo
+         * "não trava esperando confirmação" sem deixar Bash/rede
+         * livres. Bash de verificação (typecheck/test) não faz
+         * falta aqui: o Validation Loop do Senior já roda esses
+         * checks de forma determinística depois, independente do
+         * que o agente relatou ter feito (seção 12 do
+         * SENIOR_MASTER_PLAN.md — não basta o agente dizer que
+         * funciona).
+         */
+        const permissionMode =
+          isWorkspaceWrite
+            ? "acceptEdits"
             : "plan";
 
         const model =
@@ -87,6 +109,10 @@ export class ClaudeAdapter {
           model,
           "--permission-mode",
           permissionMode,
+          "--disallowedTools",
+          "Bash",
+          "WebFetch",
+          "WebSearch",
         ];
 
         const child = spawn(
