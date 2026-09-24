@@ -287,8 +287,17 @@ export class ProjectManager {
     url: string;
     name?: string;
   }): Promise<Project> {
+    /*
+     * Ancorado (^...$) de propósito: sem isso, uma string como
+     * "--upload-pack=touch pwned;github.com/a/b" também "contém"
+     * github.com/owner/repo e passaria numa checagem sem âncora —
+     * e como url vira argumento de "git clone", um valor começando
+     * com "-" pode ser interpretado como flag do git (argument
+     * injection). Exigir que a URL inteira comece com o esquema
+     * esperado elimina essa classe de entrada.
+     */
     const match = input.url.match(
-      /github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?\/?$/i
+      /^(?:https:\/\/github\.com\/|git@github\.com:)([^/]+)\/([^/.]+?)(?:\.git)?\/?$/i
     );
 
     if (!match) {

@@ -93,6 +93,24 @@ function compileRoute(
   };
 }
 
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+/*
+ * Sem isso, um fetch() sem header explícito (Content-Type vira
+ * "text/plain" por padrão) escaparia da checagem de CORS — texto
+ * simples não dispara preflight — e ainda assim conteria JSON
+ * válido que JSON.parse() aceitaria de qualquer forma. Exigir
+ * application/json de propósito força o navegador a fazer preflight
+ * em qualquer POST de outra origem, o que a allowlist de origem
+ * abaixo então bloqueia.
+ */
 async function readJsonBody(
   req: IncomingMessage
 ): Promise<unknown> {
@@ -104,6 +122,22 @@ async function readJsonBody(
 
   if (chunks.length === 0) {
     return {};
+  }
+
+  const contentType = (
+    req.headers["content-type"] ??
+    ""
+  ).toLowerCase();
+
+  if (
+    !contentType.includes(
+      "application/json"
+    )
+  ) {
+    throw new HttpError(
+      415,
+      "Content-Type deve ser application/json."
+    );
   }
 
   const raw = Buffer.concat(
@@ -125,11 +159,48 @@ function sendJson(
   res.writeHead(status, {
     "Content-Type":
       "application/json",
-    "Access-Control-Allow-Origin":
-      "*",
   });
 
   res.end(JSON.stringify(body));
+}
+
+/*
+ * Allowlist de origem para CORS. "Access-Control-Allow-Origin: *"
+ * numa API que cria projetos, importa repositórios e dispara jobs
+ * (que rodam agentes tocando git/filesystem) permite que QUALQUER
+ * site que o usuário visite dispare essas ações silenciosamente
+ * via fetch() do navegador, e ainda leia os dados de resposta —
+ * um CSRF/drive-by clássico contra ferramentas locais. Só refletimos
+ * a origem de volta quando ela está na allowlist; caso contrário,
+ * nenhum header de CORS é enviado (o navegador bloqueia por padrão).
+ */
+function resolveAllowedOrigin(
+  req: IncomingMessage
+): string | null {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return null;
+  }
+
+  const configured =
+    process.env
+      .SENIOR_GATEWAY_ALLOWED_ORIGINS;
+
+  const allowed = configured
+    ? configured
+        .split(",")
+        .map((value) =>
+          value.trim()
+        )
+    : [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+      ];
+
+  return allowed.includes(origin)
+    ? origin
+    : null;
 }
 
 export function createGatewayServer(
@@ -528,8 +599,6 @@ export function createGatewayServer(
       res.writeHead(200, {
         "Content-Type":
           "text/plain; charset=utf-8",
-        "Access-Control-Allow-Origin":
-          "*",
       });
 
       res.end(log);
@@ -692,18 +761,36 @@ export function createGatewayServer(
 
   return createServer(
     async (req, res) => {
+      const allowedOrigin =
+        resolveAllowedOrigin(req);
+
+      if (allowedOrigin) {
+        res.setHeader(
+          "Access-Control-Allow-Origin",
+          allowedOrigin
+        );
+
+        res.setHeader(
+          "Vary",
+          "Origin"
+        );
+      }
+
       try {
         if (
           req.method === "OPTIONS"
         ) {
-          res.writeHead(204, {
-            "Access-Control-Allow-Origin":
-              "*",
-            "Access-Control-Allow-Methods":
-              "GET,POST,OPTIONS",
-            "Access-Control-Allow-Headers":
-              "Content-Type",
-          });
+          res.writeHead(
+            204,
+            allowedOrigin
+              ? {
+                  "Access-Control-Allow-Methods":
+                    "GET,POST,OPTIONS",
+                  "Access-Control-Allow-Headers":
+                    "Content-Type",
+                }
+              : {}
+          );
 
           res.end();
           return;
@@ -764,6 +851,18 @@ export function createGatewayServer(
           error: `Rota não encontrada: ${method} ${url.pathname}`,
         });
       } catch (error) {
+        if (
+          error instanceof HttpError
+        ) {
+          sendJson(
+            res,
+            error.status,
+            { error: error.message }
+          );
+
+          return;
+        }
+
         const message =
           error instanceof Error
             ? error.message

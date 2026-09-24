@@ -118,8 +118,16 @@ export class GitManager {
       recursive: true,
     });
 
+    /*
+     * "--" antes dos argumentos posicionais: defesa em profundidade
+     * contra argument injection. Mesmo que url comece com "-" por
+     * algum motivo (a validação em ProjectManager.importGithub já
+     * deveria ter barrado isso), "--" instrui o git a nunca tratar o
+     * que vem depois como uma flag.
+     */
     await this.git(parent, [
       "clone",
+      "--",
       url,
       path.basename(destPath),
     ]);
