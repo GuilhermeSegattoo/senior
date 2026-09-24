@@ -31,6 +31,11 @@ import {
   type LaneLabelFlowNode,
 } from "@/components/TaskNode";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
+import { KanbanBoard } from "@/components/KanbanBoard";
+
+type WorkspaceView =
+  | "canvas"
+  | "kanban";
 
 const nodeTypes = {
   task: TaskNode,
@@ -58,6 +63,11 @@ export function ProjectWorkspace({
   const [plan, setPlan] =
     useState<Loadable<ManagedPlan>>(
       "loading"
+    );
+
+  const [view, setView] =
+    useState<WorkspaceView>(
+      "canvas"
     );
 
   const [objective, setObjective] =
@@ -348,6 +358,32 @@ export function ProjectWorkspace({
         {plan &&
           plan !== "loading" && (
             <div className="flex items-center gap-3">
+              <div className="flex gap-1 rounded-md bg-ink p-1">
+                {(
+                  [
+                    "canvas",
+                    "kanban",
+                  ] as WorkspaceView[]
+                ).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() =>
+                      setView(
+                        option
+                      )
+                    }
+                    className={`rounded px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors ${
+                      view === option
+                        ? "bg-panel text-signal"
+                        : "text-mute hover:text-paper"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+
               {job && (
                 <span className="font-mono text-xs text-mute">
                   job:{" "}
@@ -435,7 +471,8 @@ export function ProjectWorkspace({
         )}
 
         {plan &&
-          plan !== "loading" && (
+          plan !== "loading" &&
+          view === "canvas" && (
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -466,6 +503,17 @@ export function ProjectWorkspace({
 
               <Controls />
             </ReactFlow>
+          )}
+
+        {plan &&
+          plan !== "loading" &&
+          view === "kanban" && (
+            <KanbanBoard
+              tasks={plan.tasks}
+              onSelectTask={
+                setSelectedTaskId
+              }
+            />
           )}
       </div>
 
