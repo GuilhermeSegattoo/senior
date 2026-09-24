@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Project } from "@/lib/api";
 
 function formatDate(iso: string): string {
@@ -20,7 +21,10 @@ export function ProjectCard({
     project.status === "ACTIVE";
 
   return (
-    <article className="group relative flex flex-col gap-4 rounded-lg border border-line bg-panel p-5 transition-colors hover:border-signal/50">
+    <Link
+      href={`/projects/${project.id}`}
+      className="group relative flex flex-col gap-4 rounded-lg border border-line bg-panel p-5 transition-colors hover:border-signal/50"
+    >
       <div className="flex items-center gap-2">
         <span
           className={`h-2 w-2 rounded-full ${
@@ -59,6 +63,6 @@ export function ProjectCard({
           )}
         </dd>
       </dl>
-    </article>
+    </Link>
   );
 }

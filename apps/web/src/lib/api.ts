@@ -87,3 +87,70 @@ export async function createProject(
 
   return data.project;
 }
+
+export interface FilesystemEntry {
+  name: string;
+  path: string;
+}
+
+export interface FilesystemBrowseResult {
+  path: string;
+  parent: string | null;
+  directories: FilesystemEntry[];
+}
+
+export async function browseFilesystem(
+  targetPath?: string
+): Promise<FilesystemBrowseResult> {
+  const query = targetPath
+    ? `?path=${encodeURIComponent(
+        targetPath
+      )}`
+    : "";
+
+  return request<FilesystemBrowseResult>(
+    `/fs/browse${query}`
+  );
+}
+
+export async function importLocalProject(
+  path: string,
+  name?: string
+): Promise<Project> {
+  const data = await request<{
+    project: Project;
+  }>("/projects/import/local", {
+    method: "POST",
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+    body: JSON.stringify({
+      path,
+      name,
+    }),
+  });
+
+  return data.project;
+}
+
+export async function importGithubProject(
+  url: string,
+  name?: string
+): Promise<Project> {
+  const data = await request<{
+    project: Project;
+  }>("/projects/import/github", {
+    method: "POST",
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+    body: JSON.stringify({
+      url,
+      name,
+    }),
+  });
+
+  return data.project;
+}

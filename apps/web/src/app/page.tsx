@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
-  createProject,
   fetchProjects,
   type Project,
 } from "@/lib/api";
 import { ProjectCard } from "@/components/ProjectCard";
+import { NewProjectPanel } from "@/components/NewProjectPanel";
 
 type LoadState =
   | { status: "loading" }
@@ -42,15 +42,6 @@ export default function Home() {
   const [formOpen, setFormOpen] =
     useState(false);
 
-  const [name, setName] =
-    useState("");
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  const [formError, setFormError] =
-    useState<string | null>(null);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -65,43 +56,10 @@ export default function Home() {
     };
   }, []);
 
-  async function handleCreate(
-    event: React.FormEvent
-  ) {
-    event.preventDefault();
-
-    const trimmed = name.trim();
-
-    if (!trimmed) {
-      setFormError(
-        "Dê um nome ao projeto."
-      );
-
-      return;
-    }
-
-    setSubmitting(true);
-    setFormError(null);
-
-    try {
-      await createProject(trimmed);
-      setName("");
-      setFormOpen(false);
-      setState({
-        status: "loading",
-      });
-      setState(
-        await loadProjects()
-      );
-    } catch (error) {
-      setFormError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível criar o projeto."
-      );
-    } finally {
-      setSubmitting(false);
-    }
+  async function handleCreated() {
+    setFormOpen(false);
+    setState({ status: "loading" });
+    setState(await loadProjects());
   }
 
   return (
@@ -132,49 +90,9 @@ export default function Home() {
       </div>
 
       {formOpen && (
-        <form
-          onSubmit={handleCreate}
-          className="mb-8 flex flex-col gap-3 rounded-lg border border-line bg-panel-raised p-5 sm:flex-row sm:items-end"
-        >
-          <div className="flex-1">
-            <label
-              htmlFor="project-name"
-              className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-mute"
-            >
-              Nome do projeto
-            </label>
-
-            <input
-              id="project-name"
-              type="text"
-              value={name}
-              onChange={(event) =>
-                setName(
-                  event.target.value
-                )
-              }
-              placeholder="ex: Thumdra"
-              autoFocus
-              className="w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-paper outline-none placeholder:text-mute focus:border-signal"
-            />
-
-            {formError && (
-              <p className="mt-2 text-xs text-danger">
-                {formError}
-              </p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-signal px-4 py-2 text-sm font-medium text-ink transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {submitting
-              ? "criando…"
-              : "Criar"}
-          </button>
-        </form>
+        <NewProjectPanel
+          onCreated={handleCreated}
+        />
       )}
 
       {state.status === "loading" && (
