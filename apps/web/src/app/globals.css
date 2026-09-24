@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #0b1220;
+  --panel: #101a2e;
+  --panel-raised: #16223a;
+  --line: #22304a;
+  --paper: #e8edf5;
+  --mute: #7c8aa8;
+  --signal: #ff8a3d;
+  --ok: #4fd1c5;
+  --danger: #ff6b6b;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-line: var(--line);
+  --color-paper: var(--paper);
+  --color-mute: var(--mute);
+  --color-signal: var(--signal);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+  --font-display: var(--font-space-grotesk);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-sans);
+}
+
+/*
+ * Fundo em grade técnica (blueprint): reforça a metáfora de
+ * "arquitetura/projeto" sem depender de imagens externas. Bem sutil
+ * de propósito — é textura, não decoração em destaque.
+ */
+.blueprint-grid {
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(124, 138, 168, 0.08) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(124, 138, 168, 0.08) 1px,
+      transparent 1px
+    );
+  background-size: 32px 32px;
+}
+
+@keyframes signal-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 45%, transparent);
+  }
+  70% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--signal) 0%, transparent);
+  }
+}
+
+.pulse-dot {
+  animation: signal-pulse 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot {
+    animation: none;
+  }
+}
