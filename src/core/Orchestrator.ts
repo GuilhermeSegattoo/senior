@@ -108,6 +108,52 @@ Responda como SENIOR.
     return project;
   }
 
+  async importLocalProject(input: {
+    path: string;
+    name?: string;
+  }) {
+    const project =
+      await this.projectManager.importLocal(
+        input
+      );
+
+    await this.eventBus.emit({
+      type: "project.created",
+      projectId: project.id,
+      data: {
+        name: project.name,
+        path: project.path,
+        source: "local",
+      },
+    });
+
+    return project;
+  }
+
+  async importGithubProject(input: {
+    url: string;
+    name?: string;
+  }) {
+    const project =
+      await this.projectManager.importGithub(
+        input
+      );
+
+    await this.eventBus.emit({
+      type: "project.created",
+      projectId: project.id,
+      data: {
+        name: project.name,
+        path: project.path,
+        source: "github",
+        repository:
+          project.repository,
+      },
+    });
+
+    return project;
+  }
+
   async listProjects() {
     return this.projectManager.list();
   }

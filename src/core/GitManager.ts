@@ -98,6 +98,42 @@ export class GitManager {
     }
   }
 
+  /*
+   * Clona um repositório GitHub para uso como projeto do Senior.
+   * Usa "git clone" puro (não a CLI "gh") — funciona para repos
+   * públicos e para privados quando o git já tem credenciais
+   * configuradas (ex.: via credential helper do "gh auth login").
+   */
+  async cloneRepository(
+    url: string,
+    destPath: string
+  ): Promise<{
+    defaultBranch: string;
+  }> {
+    const parent = path.dirname(
+      destPath
+    );
+
+    await mkdir(parent, {
+      recursive: true,
+    });
+
+    await this.git(parent, [
+      "clone",
+      url,
+      path.basename(destPath),
+    ]);
+
+    const defaultBranch =
+      await this.git(destPath, [
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+      ]);
+
+    return { defaultBranch };
+  }
+
   async ensureRepository(
     projectPath: string
   ): Promise<void> {

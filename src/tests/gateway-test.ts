@@ -357,6 +357,112 @@ async function main() {
     );
 
     // -------------------------------------------------------
+    // GET /fs/browse + POST /projects/import/local
+    // -------------------------------------------------------
+
+    const os = await import(
+      "node:os"
+    );
+
+    const {
+      mkdtemp: mkdtempFs,
+    } = await import(
+      "node:fs/promises"
+    );
+
+    const externalFolder =
+      await mkdtempFs(
+        path.join(
+          os.tmpdir(),
+          "gateway-import-test-"
+        )
+      );
+
+    const browseResponse =
+      await fetch(
+        `${baseUrl}/fs/browse?path=${encodeURIComponent(
+          path.dirname(
+            externalFolder
+          )
+        )}`
+      );
+
+    const browseBody =
+      (await browseResponse.json()) as {
+        directories: Array<{
+          name: string;
+        }>;
+      };
+
+    if (
+      !browseBody.directories.some(
+        (entry) =>
+          externalFolder.endsWith(
+            entry.name
+          )
+      )
+    ) {
+      throw new Error(
+        `GET /fs/browse não listou a pasta temporária criada: ${JSON.stringify(browseBody.directories)}`
+      );
+    }
+
+    console.log(
+      "OK: GET /fs/browse lista subpastas reais do disco."
+    );
+
+    const importResponse =
+      await fetch(
+        `${baseUrl}/projects/import/local`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            path: externalFolder,
+          }),
+        }
+      );
+
+    if (
+      importResponse.status !== 201
+    ) {
+      throw new Error(
+        `POST /projects/import/local deveria retornar 201, retornou ${importResponse.status}`
+      );
+    }
+
+    const importedBody =
+      (await importResponse.json()) as {
+        project: {
+          id: string;
+          path: string;
+        };
+      };
+
+    if (
+      path.resolve(
+        importedBody.project.path
+      ) !==
+      path.resolve(externalFolder)
+    ) {
+      throw new Error(
+        "Projeto importado não apontou pra pasta externa real."
+      );
+    }
+
+    console.log(
+      "OK: POST /projects/import/local importa uma pasta existente sem copiar."
+    );
+
+    await cleanupProject(
+      importedBody.project.id,
+      externalFolder
+    );
+
+    // -------------------------------------------------------
     // POST /projects/:id/jobs + GET /jobs/:jobId (+ logs)
     // -------------------------------------------------------
 

@@ -15,6 +15,7 @@ import { Orchestrator } from "../core/Orchestrator.js";
 import { JobManager } from "../core/JobManager.js";
 import { EventBus } from "../core/EventBus.js";
 import { ProjectMemory } from "../core/ProjectMemory.js";
+import { FilesystemBrowser } from "../core/FilesystemBrowser.js";
 
 /*
  * API / Gateway (seção 24, Fase F, e seção 5 do
@@ -41,6 +42,7 @@ export interface GatewayDependencies {
   jobManager?: JobManager;
   eventBus?: EventBus;
   projectMemory?: ProjectMemory;
+  filesystemBrowser?: FilesystemBrowser;
 }
 
 type RouteHandler = (
@@ -149,6 +151,10 @@ export function createGatewayServer(
     deps.projectMemory ??
     new ProjectMemory();
 
+  const filesystemBrowser =
+    deps.filesystemBrowser ??
+    new FilesystemBrowser();
+
   const routes: Route[] = [];
 
   function route(
@@ -166,6 +172,120 @@ export function createGatewayServer(
       handler,
     });
   }
+
+  // =========================================================
+  // HEALTH
+  // =========================================================
+
+  route(
+    "GET",
+    "/health",
+    async (_req, res) => {
+      sendJson(res, 200, {
+        status: "ok",
+      });
+    }
+  );
+
+  // =========================================================
+  // FILESYSTEM (para o fluxo de importar projeto de uma pasta)
+  // =========================================================
+
+  route(
+    "GET",
+    "/fs/browse",
+    async (
+      _req,
+      res,
+      _params,
+      query
+    ) => {
+      const requestedPath =
+        query.get("path") ??
+        undefined;
+
+      const result =
+        await filesystemBrowser.browse(
+          requestedPath
+        );
+
+      sendJson(res, 200, result);
+    }
+  );
+
+  // =========================================================
+  // IMPORTAR PROJETO
+  // =========================================================
+
+  route(
+    "POST",
+    "/projects/import/local",
+    async (req, res) => {
+      const body =
+        (await readJsonBody(
+          req
+        )) as {
+          path?: string;
+          name?: string;
+        };
+
+      if (!body.path) {
+        sendJson(res, 400, {
+          error:
+            "Campo obrigatório: path",
+        });
+
+        return;
+      }
+
+      const project =
+        await orchestrator.importLocalProject(
+          {
+            path: body.path,
+            name: body.name,
+          }
+        );
+
+      sendJson(res, 201, {
+        project,
+      });
+    }
+  );
+
+  route(
+    "POST",
+    "/projects/import/github",
+    async (req, res) => {
+      const body =
+        (await readJsonBody(
+          req
+        )) as {
+          url?: string;
+          name?: string;
+        };
+
+      if (!body.url) {
+        sendJson(res, 400, {
+          error:
+            "Campo obrigatório: url",
+        });
+
+        return;
+      }
+
+      const project =
+        await orchestrator.importGithubProject(
+          {
+            url: body.url,
+            name: body.name,
+          }
+        );
+
+      sendJson(res, 201, {
+        project,
+      });
+    }
+  );
 
   // =========================================================
   // PROJETOS

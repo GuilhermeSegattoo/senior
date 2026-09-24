@@ -1,10 +1,13 @@
 import {
   mkdir,
   readFile,
+  stat,
   writeFile,
 } from "node:fs/promises";
 
 import path from "node:path";
+
+import { GitManager } from "./GitManager.js";
 
 import type {
   CreateProjectInput,
@@ -12,6 +15,10 @@ import type {
 } from "../types/Project.js";
 
 export class ProjectManager {
+  constructor(
+    private readonly gitManager: GitManager = new GitManager()
+  ) {}
+
   private dataDir = path.join(
     process.cwd(),
     "data"
@@ -171,6 +178,183 @@ export class ProjectManager {
       name: input.name.trim(),
       path: projectPath,
       status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    projects.push(project);
+
+    await this.writeProjects(
+      projects
+    );
+
+    return project;
+  }
+
+  // =========================================================
+  // IMPORTAR PASTA LOCAL
+  // =========================================================
+
+  /*
+   * Diferente de create(), NÃO cria um diretório novo — aponta
+   * project.path direto para uma pasta já existente no disco. Se
+   * ainda não for um repositório git, GitManager.ensureRepository()
+   * cuida disso na primeira vez que uma tarefa precisar de um
+   * worktree (mesmo comportamento de sempre, preguiçoso).
+   */
+  async importLocal(input: {
+    path: string;
+    name?: string;
+  }): Promise<Project> {
+    const resolvedPath =
+      path.resolve(input.path);
+
+    const info = await stat(
+      resolvedPath
+    ).catch(() => null);
+
+    if (!info || !info.isDirectory()) {
+      throw new Error(
+        `Caminho inválido ou não é uma pasta: ${input.path}`
+      );
+    }
+
+    const projects =
+      await this.readProjects();
+
+    const alreadyRegistered =
+      projects.find(
+        (project) =>
+          path.resolve(
+            project.path
+          ) === resolvedPath
+      );
+
+    if (alreadyRegistered) {
+      throw new Error(
+        `Esta pasta já está registrada como o projeto "${alreadyRegistered.name}" (${alreadyRegistered.id}).`
+      );
+    }
+
+    const name =
+      input.name?.trim() ||
+      path.basename(resolvedPath);
+
+    const id = this.createSlug(name);
+
+    if (!id) {
+      throw new Error(
+        "Não foi possível gerar um ID válido para o projeto."
+      );
+    }
+
+    if (
+      projects.find(
+        (project) => project.id === id
+      )
+    ) {
+      throw new Error(
+        `O projeto ${id} já existe.`
+      );
+    }
+
+    const now =
+      new Date().toISOString();
+
+    const project: Project = {
+      id,
+      name,
+      path: resolvedPath,
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    projects.push(project);
+
+    await this.writeProjects(
+      projects
+    );
+
+    return project;
+  }
+
+  // =========================================================
+  // IMPORTAR DO GITHUB
+  // =========================================================
+
+  async importGithub(input: {
+    url: string;
+    name?: string;
+  }): Promise<Project> {
+    const match = input.url.match(
+      /github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?\/?$/i
+    );
+
+    if (!match) {
+      throw new Error(
+        `URL do GitHub inválida: ${input.url}`
+      );
+    }
+
+    const [, owner, repoName] =
+      match;
+
+    const name =
+      input.name?.trim() ||
+      repoName;
+
+    const id = this.createSlug(name);
+
+    if (!id) {
+      throw new Error(
+        "Não foi possível gerar um ID válido para o projeto."
+      );
+    }
+
+    const projects =
+      await this.readProjects();
+
+    if (
+      projects.find(
+        (project) => project.id === id
+      )
+    ) {
+      throw new Error(
+        `O projeto ${id} já existe.`
+      );
+    }
+
+    const projectPath = path.join(
+      this.projectsDir,
+      id
+    );
+
+    await mkdir(this.projectsDir, {
+      recursive: true,
+    });
+
+    const { defaultBranch } =
+      await this.gitManager.cloneRepository(
+        input.url,
+        projectPath
+      );
+
+    const now =
+      new Date().toISOString();
+
+    const project: Project = {
+      id,
+      name,
+      path: projectPath,
+      status: "ACTIVE",
+      repository: {
+        provider: "github",
+        owner,
+        name: repoName,
+        url: input.url,
+        defaultBranch,
+      },
       createdAt: now,
       updatedAt: now,
     };
