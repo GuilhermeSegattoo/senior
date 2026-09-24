@@ -36,8 +36,12 @@ export default function RootLayout({
     <html
       lang="pt-BR"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="flex h-screen flex-col overflow-hidden bg-ink text-paper">
+      <body
+        className="flex h-screen flex-col overflow-hidden bg-ink text-paper"
+        suppressHydrationWarning
+      >
         <header className="shrink-0 border-b border-line bg-panel/60 backdrop-blur-sm">
           <div className="flex items-center justify-between px-6 py-4">
             <div className="flex items-baseline gap-2">
