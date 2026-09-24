@@ -2,6 +2,12 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
 import { resolveGlobalCli } from "./resolveGlobalCli.js";
+import {
+  parseCodexLoginStatus,
+  spawnLoginProcess,
+  type LoginHandle,
+  type ProviderAuthStatus,
+} from "./ProviderAuth.js";
 
 export type CodexSandbox =
   | "read-only"
@@ -190,5 +196,63 @@ export class CodexAdapter {
       child.on("error", () => resolve(false));
       child.on("close", (code) => resolve(code === 0));
     });
+  }
+
+  async authStatus(): Promise<ProviderAuthStatus> {
+    const {
+      command,
+      prefixArgs,
+    } = await resolveCodexCommand();
+
+    return new Promise((resolve) => {
+      const child = spawn(
+        command,
+        [...prefixArgs, "login", "status"],
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+        }
+      );
+
+      /*
+       * "codex login status" imprime no stderr, não no stdout
+       * (confirmado: um "2>&1" manual mascarava isso e enganava a
+       * primeira versão deste código, que só lia stdout e sempre
+       * via string vazia). Concatena os dois porque não há garantia
+       * de que isso não mude entre versões do CLI.
+       */
+      let output = "";
+
+      child.stdout.on("data", (data) => {
+        output += data.toString();
+      });
+
+      child.stderr.on("data", (data) => {
+        output += data.toString();
+      });
+
+      child.on("error", () =>
+        resolve({
+          loggedIn: false,
+          detail:
+            "Não foi possível verificar o status do Codex.",
+          reliable: false,
+        })
+      );
+
+      child.on("close", () => {
+        resolve(parseCodexLoginStatus(output));
+      });
+    });
+  }
+
+  login(): LoginHandle {
+    return spawnLoginProcess(
+      resolveCodexCommand().then(
+        ({ command, prefixArgs }) => ({
+          command,
+          args: [...prefixArgs, "login"],
+        })
+      )
+    );
   }
 }

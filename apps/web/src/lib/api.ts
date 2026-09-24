@@ -376,6 +376,79 @@ export async function fetchJob(
   return data.job;
 }
 
+export type AuthProviderName =
+  | "codex"
+  | "claude";
+
+export interface ProviderAuthStatus {
+  loggedIn: boolean;
+  detail: string;
+  reliable: boolean;
+  email?: string;
+  plan?: string;
+}
+
+export type LoginSessionStatus =
+  | "pending_url"
+  | "pending_completion"
+  | "success"
+  | "failed";
+
+export interface LoginSession {
+  status: LoginSessionStatus;
+  url: string | null;
+  message?: string;
+}
+
+export async function fetchProvidersStatus(): Promise<
+  Record<AuthProviderName, ProviderAuthStatus>
+> {
+  const data = await request<{
+    providers: Record<
+      AuthProviderName,
+      ProviderAuthStatus
+    >;
+  }>("/providers/status");
+
+  return data.providers;
+}
+
+export async function startProviderLogin(
+  provider: AuthProviderName
+): Promise<LoginSession> {
+  const data = await request<{
+    session: LoginSession;
+  }>(
+    `/providers/${provider}/login`,
+    { method: "POST" }
+  );
+
+  return data.session;
+}
+
+export async function fetchProviderLoginSession(
+  provider: AuthProviderName
+): Promise<LoginSession | null> {
+  try {
+    const data = await request<{
+      session: LoginSession;
+    }>(
+      `/providers/${provider}/login`
+    );
+
+    return data.session;
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 404
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
 export async function askChief(
   message: string,
   selection: ModelSelection = {}

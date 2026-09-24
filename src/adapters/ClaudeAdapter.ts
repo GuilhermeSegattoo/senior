@@ -1,6 +1,12 @@
 import { spawn } from "node:child_process";
 
 import { resolveGlobalCli } from "./resolveGlobalCli.js";
+import {
+  parseClaudeAuthStatus,
+  spawnLoginProcess,
+  type LoginHandle,
+  type ProviderAuthStatus,
+} from "./ProviderAuth.js";
 
 /*
  * Diferente do CodexAdapter (API key / conta ChatGPT via "codex
@@ -270,6 +276,80 @@ export class ClaudeAdapter {
             resolve(code === 0)
         );
       }
+    );
+  }
+
+  async authStatus(): Promise<ProviderAuthStatus> {
+    const {
+      command,
+      prefixArgs,
+    } = await resolveClaudeCommand();
+
+    return new Promise((resolve) => {
+      const child = spawn(
+        command,
+        [
+          ...prefixArgs,
+          "auth",
+          "status",
+          "--json",
+        ],
+        {
+          stdio: [
+            "ignore",
+            "pipe",
+            "pipe",
+          ],
+        }
+      );
+
+      let stdout = "";
+
+      child.stdout.on(
+        "data",
+        (data) => {
+          stdout += data.toString();
+        }
+      );
+
+      child.on("error", () =>
+        resolve({
+          loggedIn: false,
+          detail:
+            "Não foi possível verificar o status do Claude.",
+          reliable: true,
+        })
+      );
+
+      child.on("close", () => {
+        resolve(
+          parseClaudeAuthStatus(stdout)
+        );
+      });
+    });
+  }
+
+  /*
+   * NUNCA rode "claude auth login" de verdade a partir desta própria
+   * sessão de desenvolvimento: se este processo do Claude Code já
+   * está autenticado via o mesmo CLI/keychain, um login real aqui
+   * pode trocar/invalidar a credencial que a sessão atual está
+   * usando. Testado apenas com "--help"; o disparo real só deve
+   * acontecer quando o próprio usuário clicar em "conectar" na tela
+   * de configuração do Senior, sabendo o que está fazendo.
+   */
+  login(): LoginHandle {
+    return spawnLoginProcess(
+      resolveClaudeCommand().then(
+        ({ command, prefixArgs }) => ({
+          command,
+          args: [
+            ...prefixArgs,
+            "auth",
+            "login",
+          ],
+        })
+      )
     );
   }
 }

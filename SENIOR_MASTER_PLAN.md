@@ -1137,8 +1137,59 @@ ValidationEngine
 
 # 22. Ponto exato em que o desenvolvimento parou
 
-**Fase A (Validation Loop + Correction Loop) está completa e
-testada.** Os 14 itens da seção 24 foram implementados:
+**Fases A a F estão completas e testadas. A Fase G (Frontend) está
+substancialmente avançada** — o que existe até agora:
+
+- Lista de projetos + import (pasta local via navegador de pastas
+  próprio em `/fs/browse`, ou GitHub).
+- Workspace do projeto (`apps/web/src/components/ProjectWorkspace.tsx`)
+  com duas visualizações alternáveis: canvas (React Flow, layout em
+  swim lanes por agente — `apps/web/src/lib/layout.ts`) e Kanban
+  (`KanbanBoard.tsx`, 8 colunas espelhando `TaskStatus`).
+- `TaskDetailPanel.tsx`: painel lateral aberto ao clicar numa
+  task/nó, com seleção manual de provider (`codex`/`claude`/`pi`) e
+  modelo por disparo (`ModelSelection`), plumbing de ponta a ponta
+  (Orchestrator → gateway → frontend).
+- `ChiefChat.tsx`: chat global cross-project, montado no layout raiz
+  (fora do workspace de qualquer projeto específico) — `POST
+  /chief/ask`. Ainda é só conversa; não dispara planos/jobs (isso é
+  v2, deliberadamente adiado).
+- **Tela de configuração de provedores** (`/settings`,
+  `SettingsScreen.tsx`): mostra status de Codex e Claude
+  (`GET /providers/status`) e permite **disparar o login/OAuth direto
+  pela tela** (`POST /providers/:provider/login` +
+  `GET /providers/:provider/login` para polling), não só exibir
+  status. Grok aparece como "ainda não integrado". Ver
+  `src/adapters/ProviderAuth.ts` (lógica compartilhada de spawn do
+  processo de login e parsers de status) e
+  `src/core/ProviderAuthManager.ts` (sessão de login em memória, uma
+  por provedor). Testado em `src/tests/provider-auth-test.ts`.
+
+Dois bugs reais encontrados testando contra o CLI de verdade (não
+pelos testes com fakes, que não pegam isso por construção):
+
+1. `codex login status` imprime no **stderr**, não no stdout —
+   confirmado só depois de testar manualmente sem `2>&1` (que mascara
+   a diferença). A primeira versão de `CodexAdapter.authStatus()` só
+   lia stdout e sempre via string vazia. Corrigido lendo os dois
+   streams. Isso também foi corrigido preventivamente em
+   `spawnLoginProcess()` (a URL de autorização de `codex login`/`claude
+   auth login` pode igualmente sair em qualquer um dos dois).
+2. (Mesma classe de bug, coberta pelo teste de regressão em
+   `provider-auth-test.ts` usando um fixture que escreve no stderr —
+   ver `FAKE_LOGIN_STREAM`.)
+
+**NUNCA rode `claude auth login` de verdade a partir de uma sessão do
+próprio Claude Code em desenvolvimento** — se o processo já está
+autenticado via o mesmo keychain, um login real pode trocar/invalidar
+a credencial que a sessão atual está usando. O disparo real só deve
+acontecer quando o usuário final clicar em "Conectar" na tela do
+Senior, sabendo o que está fazendo (a UI já avisa isso para o card do
+Claude).
+
+## Fase A (Validation Loop + Correction Loop) --- ✅ CONCLUÍDA
+
+Os 14 itens da seção 24 foram implementados:
 
 - `Orchestrator.runValidationLoop()` (privado, compartilhado entre
   `executeTask()` e `correctTask()`) roda `ValidationEngine.runChecks()`,
@@ -1194,14 +1245,26 @@ integração** — vale ler antes de mexer em Git/dependências:
 
 # 23. Próxima tarefa imediata
 
-Fases A a F estão prontas. A próxima etapa é a **Fase G — Frontend**
-(seção 17, 18, 24), a maior e mais aberta do roadmap: começar pela
-visualização de projetos (lista simples) antes de qualquer canvas —
-"não tente construir tudo de uma vez" vale ainda mais aqui do que nas
-fases anteriores. Ver seção 24 para a ordem sugerida dentro da própria
-Fase G (shell → lista de projetos → workspace → DAG → agentes →
-terminal visual → eventos → validation nodes → approvals → canvas
-infinito → timeline → command bar).
+Fases A a F estão prontas, e a Fase G (Frontend) já cobre lista de
+projetos, workspace (canvas + Kanban), painel de tarefa com seleção de
+modelo, Chief chat e a tela de configuração de provedores com login
+disparado pela UI (seção 22). O que falta dentro da própria Fase G,
+sem ordem obrigatória:
+
+- Integração do Grok (`GrokAdapter`/`GrokRuntime`) — bloqueada em o
+  usuário instalar o CLI oficial e fazer login interativo por conta
+  própria; o padrão de `ProviderAuthManager`/`spawnLoginProcess` já
+  foi desenhado para comportar um terceiro provedor sem redesenho.
+- Chief "v2": hoje só conversa (`talkToChief`); o próximo passo natural
+  é deixá-lo de fato criar planos/disparar jobs a partir da conversa,
+  em vez de só explicar qual seria o próximo passo manual.
+- Stream de eventos em tempo real (hoje é só polling — decisão
+  consciente até aqui, não um esquecimento).
+- Terminal visual, validation nodes e approvals na UI (itens 6, 8 e 9
+  da ordem sugerida na seção 24) ainda não têm equivalente visual —
+  hoje só existem como conceito no core/gateway.
+
+Fases H (execução paralela) e I (Alexa) ainda não foram iniciadas.
 
 Dívidas conscientes deixadas para trás (não bloqueantes, mas reais):
 

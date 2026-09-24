@@ -16,10 +16,15 @@ import { JobManager } from "../core/JobManager.js";
 import { EventBus } from "../core/EventBus.js";
 import { ProjectMemory } from "../core/ProjectMemory.js";
 import { FilesystemBrowser } from "../core/FilesystemBrowser.js";
+import { ProviderAuthManager } from "../core/ProviderAuthManager.js";
 
 import type {
   RuntimeName,
 } from "../runtimes/RuntimeManager.js";
+
+import type {
+  AuthProviderName,
+} from "../core/ProviderAuthManager.js";
 
 /*
  * API / Gateway (seção 24, Fase F, e seção 5 do
@@ -47,6 +52,7 @@ export interface GatewayDependencies {
   eventBus?: EventBus;
   projectMemory?: ProjectMemory;
   filesystemBrowser?: FilesystemBrowser;
+  providerAuthManager?: ProviderAuthManager;
 }
 
 type RouteHandler = (
@@ -229,6 +235,10 @@ export function createGatewayServer(
   const filesystemBrowser =
     deps.filesystemBrowser ??
     new FilesystemBrowser();
+
+  const providerAuthManager =
+    deps.providerAuthManager ??
+    new ProviderAuthManager();
 
   const routes: Route[] = [];
 
@@ -834,6 +844,95 @@ export function createGatewayServer(
 
       sendJson(res, 200, {
         agents,
+      });
+    }
+  );
+
+  // =========================================================
+  // PROVEDORES (status e login das assinaturas Codex/Claude)
+  // =========================================================
+
+  function isKnownProvider(
+    value: string
+  ): value is AuthProviderName {
+    return (
+      value === "codex" ||
+      value === "claude"
+    );
+  }
+
+  route(
+    "GET",
+    "/providers/status",
+    async (_req, res) => {
+      const providers =
+        await providerAuthManager.status();
+
+      sendJson(res, 200, {
+        providers,
+      });
+    }
+  );
+
+  route(
+    "POST",
+    "/providers/:provider/login",
+    async (_req, res, params) => {
+      if (
+        !isKnownProvider(
+          params.provider
+        )
+      ) {
+        sendJson(res, 400, {
+          error: `Provedor desconhecido: ${params.provider}`,
+        });
+
+        return;
+      }
+
+      const session =
+        await providerAuthManager.startLogin(
+          params.provider
+        );
+
+      sendJson(res, 202, {
+        session,
+      });
+    }
+  );
+
+  route(
+    "GET",
+    "/providers/:provider/login",
+    async (_req, res, params) => {
+      if (
+        !isKnownProvider(
+          params.provider
+        )
+      ) {
+        sendJson(res, 400, {
+          error: `Provedor desconhecido: ${params.provider}`,
+        });
+
+        return;
+      }
+
+      const session =
+        providerAuthManager.getSession(
+          params.provider
+        );
+
+      if (!session) {
+        sendJson(res, 404, {
+          error:
+            "Nenhuma tentativa de login em andamento para este provedor.",
+        });
+
+        return;
+      }
+
+      sendJson(res, 200, {
+        session,
       });
     }
   );
