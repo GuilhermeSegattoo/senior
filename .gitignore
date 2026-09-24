@@ -24,8 +24,9 @@ secrets.json
 # Senior runtime data
 data/
 
-# Local projects managed by Senior
-projects/
+# Local projects managed by Senior (repo root only — not
+# apps/web/src/app/projects/, the Next.js route folder)
+/projects/
 
 # Experiments / spikes
 experiments/

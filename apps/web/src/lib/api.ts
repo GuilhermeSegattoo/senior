@@ -22,6 +22,15 @@ export function getApiUrl(): string {
   );
 }
 
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit
@@ -46,7 +55,10 @@ async function request<T>(
           )
         : `Falha na requisição (${response.status}).`;
 
-    throw new Error(message);
+    throw new ApiError(
+      response.status,
+      message
+    );
   }
 
   return body as T;
@@ -69,6 +81,29 @@ export async function fetchProjects(): Promise<
   }>("/projects");
 
   return data.projects;
+}
+
+export async function fetchProject(
+  projectId: string
+): Promise<Project | null> {
+  try {
+    const data = await request<{
+      project: Project;
+    }>(
+      `/projects/${projectId}`
+    );
+
+    return data.project;
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 404
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 export async function createProject(
@@ -153,4 +188,120 @@ export async function importGithubProject(
   });
 
   return data.project;
+}
+
+export type TaskStatus =
+  | "WAITING"
+  | "READY"
+  | "RUNNING"
+  | "VALIDATING"
+  | "CORRECTION_REQUIRED"
+  | "VALIDATED"
+  | "DONE"
+  | "FAILED"
+  | "BLOCKED";
+
+export interface ManagedTask {
+  id: string;
+  agent: string;
+  task: string;
+  dependsOn: string[];
+  status: TaskStatus;
+  result?: string;
+  error?: string;
+  branch?: string;
+  commit?: string;
+  headCommit?: string;
+}
+
+export interface ManagedPlan {
+  projectId: string;
+  objective: string;
+  createdAt: string;
+  tasks: ManagedTask[];
+}
+
+export async function fetchPlan(
+  projectId: string
+): Promise<ManagedPlan | null> {
+  try {
+    const data = await request<{
+      plan: ManagedPlan;
+    }>(
+      `/projects/${projectId}/plan`
+    );
+
+    return data.plan;
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 404
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function createPlan(
+  projectId: string,
+  objective: string
+): Promise<ManagedPlan> {
+  const data = await request<{
+    plan: ManagedPlan;
+  }>(`/projects/${projectId}/plan`, {
+    method: "POST",
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+    body: JSON.stringify({
+      objective,
+    }),
+  });
+
+  return data.plan;
+}
+
+export type JobStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "DONE"
+  | "OBJECTIVE_NOT_MET"
+  | "FAILED"
+  | "NEEDS_HUMAN"
+  | "BLOCKED";
+
+export interface Job {
+  id: string;
+  projectId: string;
+  status: JobStatus;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export async function startJob(
+  projectId: string
+): Promise<Job> {
+  const data = await request<{
+    job: Job;
+  }>(
+    `/projects/${projectId}/jobs`,
+    { method: "POST" }
+  );
+
+  return data.job;
+}
+
+export async function fetchJob(
+  jobId: string
+): Promise<Job> {
+  const data = await request<{
+    job: Job;
+  }>(`/jobs/${jobId}`);
+
+  return data.job;
 }

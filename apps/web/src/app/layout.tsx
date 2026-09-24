@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   Space_Grotesk,
   Inter,
@@ -36,26 +37,31 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-ink text-paper">
-        <header className="border-b border-line bg-panel/60 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <body className="flex h-screen flex-col overflow-hidden bg-ink text-paper">
+        <header className="shrink-0 border-b border-line bg-panel/60 backdrop-blur-sm">
+          <div className="flex items-center justify-between px-6 py-4">
             <div className="flex items-baseline gap-2">
-              <span className="font-mono text-xs text-mute">
-                [
-              </span>
-              <span className="font-display text-lg font-medium tracking-tight text-paper">
-                SENIOR
-              </span>
-              <span className="font-mono text-xs text-mute">
-                ]
-              </span>
+              <Link
+                href="/"
+                className="flex items-baseline gap-2"
+              >
+                <span className="font-mono text-xs text-mute">
+                  [
+                </span>
+                <span className="font-display text-lg font-medium tracking-tight text-paper">
+                  SENIOR
+                </span>
+                <span className="font-mono text-xs text-mute">
+                  ]
+                </span>
+              </Link>
             </div>
 
             <GatewayStatus />
           </div>
         </header>
 
-        <main className="blueprint-grid flex-1">
+        <main className="blueprint-grid min-h-0 flex-1 overflow-y-auto">
           {children}
         </main>
       </body>
