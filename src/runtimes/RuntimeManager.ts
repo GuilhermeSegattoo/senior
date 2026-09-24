@@ -1,4 +1,5 @@
 import { CodexRuntime } from "./CodexRuntime.js";
+import { ClaudeRuntime } from "./ClaudeRuntime.js";
 import { PiRuntime } from "./PiRuntime.js";
 
 import type {
@@ -7,15 +8,31 @@ import type {
 
 export type RuntimeName =
   | "codex"
+  | "claude"
   | "pi";
+
+export interface CreateRuntimeOptions {
+  /*
+   * Modelo específico para o runtime, quando o runtime suportar
+   * (ex.: "claude" aceita qualquer alias de modelo do CLI Claude).
+   * Ignorado por runtimes que não usam essa opção.
+   */
+  model?: string;
+}
 
 export class RuntimeManager {
   create(
-    runtimeName: RuntimeName = "codex"
+    runtimeName: RuntimeName = "codex",
+    options: CreateRuntimeOptions = {}
   ): AgentRuntime {
     switch (runtimeName) {
       case "codex":
         return new CodexRuntime();
+
+      case "claude":
+        return new ClaudeRuntime({
+          model: options.model,
+        });
 
       case "pi": {
         const provider =
@@ -23,6 +40,7 @@ export class RuntimeManager {
           "openai-codex";
 
         const modelName =
+          options.model?.trim() ||
           process.env.SENIOR_PI_MODEL?.trim() ||
           "gpt-6-astra";
 
@@ -55,6 +73,7 @@ export class RuntimeManager {
 
     if (
       configured !== "codex" &&
+      configured !== "claude" &&
       configured !== "pi"
     ) {
       throw new Error(

@@ -405,7 +405,8 @@ Interface conceitual:
 AgentRuntime
 ├── PiRuntime
 ├── CodexRuntime
-└── futuros runtimes
+├── ClaudeRuntime
+└── futuros runtimes (ex.: GrokRuntime)
 ```
 
 O `AgentExecutor` não deve conhecer detalhes específicos de cada
@@ -417,10 +418,38 @@ Atualmente:
 
 -   Pi Runtime funciona;
 -   Codex Runtime funciona;
+-   ✅ **Claude Runtime funciona** — `ClaudeAdapter` +
+    `ClaudeRuntime` invocam o CLI `claude` (Claude Code) já
+    autenticado na máquina pela assinatura do usuário, **não** por
+    chave de API do Senior. Confirmado com uma chamada real. Grok
+    fica para depois: precisa que o usuário instale e faça login no
+    CLI oficial da xAI (`@xai-official/grok`) primeiro — sem chave
+    de API também, mesma filosofia de "usar a assinatura, não pagar
+    por token à parte".
 -   OpenAI via Pi funciona;
 -   Anthropic via Pi está integrado, embora disponibilidade dependa da
     conta;
--   runtime pode ser escolhido por configuração.
+-   ✅ **Seleção manual por chamada**: em vez de só uma variável de
+    ambiente fixa para tudo, `Orchestrator.createPlan()`,
+    `executeTask()`, `correctTask()` e `talkToChief()` aceitam um
+    `{ provider, model }` opcional — quem dispara escolhe o modelo
+    na hora, tarefa por tarefa. CLI: `--provider codex|claude|pi
+    --model <modelo>` em `plan`/`executar`/`ask`. API: mesmo par de
+    campos no corpo do POST. Sem informar nada, cai no comportamento
+    de sempre (Codex).
+
+Dois bugs reais de Windows apareceram construindo isso, mesma causa
+raiz dos anteriores (npx/JobManager, codex/CodexAdapter): "claude"
+instalado via `npm install -g` também é um shim `.cmd`. A correção
+foi generalizada em `resolveGlobalCli()` (usado por Codex e Claude),
+que resolve o executável real por trás do shim via `where <comando>`
+em vez de depender de shell. Um terceiro problema, específico do
+Claude: a flag `--bare` (cogitada para reduzir overhead) desativa
+leitura do keychain do SO — exatamente onde a sessão da assinatura
+fica — quebrando o login mesmo com o CLI autenticado. Descoberto
+testando manualmente antes de considerar a integração pronta;
+documentado como comentário no próprio adapter para não ser
+reintroduzido.
 
 Pi é um motor abaixo do Senior. Ele não substitui:
 

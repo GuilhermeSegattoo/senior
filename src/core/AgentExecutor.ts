@@ -19,6 +19,12 @@ import type {
 export interface AgentExecutionOptions {
   workspacePath: string;
   branch: string;
+
+  /*
+   * Sobrescreve o runtime padrão só para esta execução (seleção
+   * manual de provedor/modelo por tarefa, na hora de disparar).
+   */
+  runtime?: AgentRuntime;
 }
 
 export class AgentExecutor {
@@ -280,8 +286,12 @@ Ao terminar, informe:
 - riscos ou pendências.
 `;
 
+    const runtime =
+      options.runtime ??
+      this.runtime;
+
     const result =
-      await this.runtime.ask(
+      await runtime.ask(
         prompt,
         {
           cwd: options.workspacePath,

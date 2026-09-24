@@ -12,6 +12,11 @@ import { SemanticValidator } from "./SemanticValidator.js";
 import { PlanValidator } from "./PlanValidator.js";
 import { ProjectMemory } from "./ProjectMemory.js";
 import { EventBus } from "./EventBus.js";
+import { RuntimeManager } from "../runtimes/RuntimeManager.js";
+
+import type {
+  RuntimeName,
+} from "../runtimes/RuntimeManager.js";
 
 import type {
   ExecutionPlan,
@@ -26,8 +31,20 @@ import type {
   Project,
 } from "../types/Project.js";
 
+/*
+ * Seleção manual de provedor/modelo por chamada — quem dispara
+ * decide na hora (execução de tarefa, correção, plano ou Chief),
+ * em vez de uma única variável de ambiente fixa para tudo.
+ */
+export interface ModelSelection {
+  provider?: RuntimeName;
+  model?: string;
+}
+
 export class Orchestrator {
   private codex = new CodexAdapter();
+  private runtimeManager =
+    new RuntimeManager();
   private taskManager = new TaskManager();
   private projectManager = new ProjectManager();
   private integrationManager =
@@ -66,7 +83,8 @@ planValidator = new PlanValidator();
   }
 
   async talkToChief(
-    message: string
+    message: string,
+    selection: ModelSelection = {}
   ): Promise<string> {
     const instructions =
       await this.getChiefInstructions();
@@ -81,7 +99,22 @@ ${message}
 Responda como SENIOR.
 `;
 
-    return this.codex.ask(prompt);
+    const runtime =
+      this.runtimeManager.create(
+        selection.provider ??
+          "codex",
+        {
+          model: selection.model,
+        }
+      );
+
+    const result =
+      await runtime.ask(prompt, {
+        cwd: process.cwd(),
+        readOnly: true,
+      });
+
+    return result.text;
   }
 
   // =========================================================
@@ -178,7 +211,8 @@ Responda como SENIOR.
 
   async createPlan(
     projectId: string,
-    objective: string
+    objective: string,
+    selection: ModelSelection = {}
   ): Promise<ExecutionPlan> {
     const project =
       await this.projectManager.getById(
@@ -266,8 +300,23 @@ Regras:
 - Não inclua texto antes ou depois do JSON.
 `;
 
+    const runtime =
+      this.runtimeManager.create(
+        selection.provider ??
+          "codex",
+        {
+          model: selection.model,
+        }
+      );
+
+    const chiefResult =
+      await runtime.ask(prompt, {
+        cwd: process.cwd(),
+        readOnly: true,
+      });
+
     const response =
-      await this.codex.ask(prompt);
+      chiefResult.text;
 
     const generated =
       JSON.parse(response) as Omit<
@@ -359,7 +408,8 @@ Regras:
 
   async executeTask(
     projectId: string,
-    taskId: string
+    taskId: string,
+    selection: ModelSelection = {}
   ) {
     const project =
       await this.projectManager.getById(
@@ -377,6 +427,16 @@ Regras:
         `Projeto ${projectId} não está ativo.`
       );
     }
+
+    const runtimeOverride =
+      selection.provider
+        ? this.runtimeManager.create(
+            selection.provider,
+            {
+              model: selection.model,
+            }
+          )
+        : undefined;
 
     const plan =
       await this.taskManager.getPlan(
@@ -490,6 +550,9 @@ Regras:
 
             branch:
               workspace.branch,
+
+            runtime:
+              runtimeOverride,
           }
         );
 
@@ -648,8 +711,19 @@ Regras:
 
   async correctTask(
     projectId: string,
-    taskId: string
+    taskId: string,
+    selection: ModelSelection = {}
   ) {
+    const runtimeOverride =
+      selection.provider
+        ? this.runtimeManager.create(
+            selection.provider,
+            {
+              model: selection.model,
+            }
+          )
+        : undefined;
+
     const project =
       await this.projectManager.getById(
         projectId
@@ -739,6 +813,9 @@ Regras:
 
             branch:
               task.branch,
+
+            runtime:
+              runtimeOverride,
           },
           correctionContext
         );

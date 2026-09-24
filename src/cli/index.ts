@@ -2,9 +2,94 @@ import { Orchestrator } from "../core/Orchestrator.js";
 import { JobManager } from "../core/JobManager.js";
 import { EventBus } from "../core/EventBus.js";
 
+import type { ModelSelection } from "../core/Orchestrator.js";
+import type { RuntimeName } from "../runtimes/RuntimeManager.js";
+
 const senior = new Orchestrator();
 const jobManager = new JobManager();
 const eventBus = new EventBus();
+
+const VALID_PROVIDERS: RuntimeName[] =
+  ["codex", "claude", "pi"];
+
+/*
+ * Extrai "--flag valor" de um array de argumentos posicionais,
+ * devolvendo o valor e o array sem esses dois itens — usado para
+ * "--provider"/"--model" nos comandos que disparam agentes, sem
+ * atrapalhar o parsing posicional que cada comando já faz.
+ */
+function extractFlag(
+  args: string[],
+  flag: string
+): {
+  value: string | undefined;
+  rest: string[];
+} {
+  const index = args.indexOf(flag);
+
+  if (index === -1) {
+    return {
+      value: undefined,
+      rest: args,
+    };
+  }
+
+  const value = args[index + 1];
+
+  const rest = [
+    ...args.slice(0, index),
+    ...args.slice(index + 2),
+  ];
+
+  return { value, rest };
+}
+
+function extractModelSelection(
+  args: string[]
+): {
+  selection: ModelSelection;
+  rest: string[];
+} {
+  const {
+    value: providerValue,
+    rest: afterProvider,
+  } = extractFlag(
+    args,
+    "--provider"
+  );
+
+  const {
+    value: model,
+    rest,
+  } = extractFlag(
+    afterProvider,
+    "--model"
+  );
+
+  if (
+    providerValue &&
+    !VALID_PROVIDERS.includes(
+      providerValue as RuntimeName
+    )
+  ) {
+    console.error(
+      `Provedor inválido: ${providerValue}. Use um de: ${VALID_PROVIDERS.join(", ")}`
+    );
+
+    process.exit(1);
+  }
+
+  return {
+    selection: {
+      provider:
+        providerValue as
+          | RuntimeName
+          | undefined,
+      model,
+    },
+    rest,
+  };
+}
 
 const nomesAgentes: Record<string, string> = {
   architect: "ARQUITETO",
@@ -258,22 +343,31 @@ async function main() {
   // =========================================================
 
   if (command === "plan") {
+    const {
+      selection,
+      rest: planArgs,
+    } = extractModelSelection(
+      args
+    );
+
     const projectId =
-      args[0];
+      planArgs[0];
 
     const objective =
-      args.slice(1).join(" ");
+      planArgs
+        .slice(1)
+        .join(" ");
 
     if (
       !projectId ||
       !objective
     ) {
       console.error(
-        'Uso: senior plan <projeto> "<objetivo>"'
+        'Uso: senior plan <projeto> "<objetivo>" [--provider codex|claude|pi] [--model <modelo>]'
       );
 
       console.error(
-        'Exemplo: senior plan auth-api "Criar autenticação"'
+        'Exemplo: senior plan auth-api "Criar autenticação" --provider claude'
       );
 
       process.exit(1);
@@ -290,7 +384,8 @@ async function main() {
     const plan =
       await senior.createPlan(
         projectId,
-        objective
+        objective,
+        selection
       );
 
     console.log(
@@ -1125,22 +1220,29 @@ async function main() {
   if (
     command === "executar"
   ) {
+    const {
+      selection,
+      rest: executarArgs,
+    } = extractModelSelection(
+      args
+    );
+
     const projectId =
-      args[0];
+      executarArgs[0];
 
     const taskId =
-      args[1];
+      executarArgs[1];
 
     if (
       !projectId ||
       !taskId
     ) {
       console.error(
-        "Uso: senior executar <projeto> <tarefa>"
+        "Uso: senior executar <projeto> <tarefa> [--provider codex|claude|pi] [--model <modelo>]"
       );
 
       console.error(
-        "Exemplo: senior executar auth-api task-2"
+        "Exemplo: senior executar auth-api task-2 --provider claude"
       );
 
       process.exit(1);
@@ -1157,7 +1259,8 @@ async function main() {
     const execution =
       await senior.executeTask(
         projectId,
-        taskId
+        taskId,
+        selection
       );
 
     const agente =
@@ -1303,12 +1406,19 @@ async function main() {
   // =========================================================
 
   if (command === "ask") {
+    const {
+      selection,
+      rest: askArgs,
+    } = extractModelSelection(
+      args
+    );
+
     const message =
-      args.join(" ");
+      askArgs.join(" ");
 
     if (!message) {
       console.error(
-        'Uso: senior ask "sua solicitação"'
+        'Uso: senior ask "sua solicitação" [--provider codex|claude|pi] [--model <modelo>]'
       );
 
       process.exit(1);
@@ -1320,7 +1430,8 @@ async function main() {
 
     const response =
       await senior.talkToChief(
-        message
+        message,
+        selection
       );
 
     console.log(
@@ -1406,8 +1517,12 @@ GATEWAY
 
 SENIOR
 
-  ask "<solicitação>"
+  ask "<solicitação>" [--provider codex|claude|pi] [--model <modelo>]
       Conversa diretamente com o Líder.
+
+  --provider e --model também funcionam em "plan" e "executar" —
+  escolha manual de provedor/modelo por chamada, sem depender de uma
+  variável de ambiente fixa. Padrão: codex.
 
 EXEMPLOS
 

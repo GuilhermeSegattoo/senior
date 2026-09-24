@@ -17,6 +17,10 @@ import { EventBus } from "../core/EventBus.js";
 import { ProjectMemory } from "../core/ProjectMemory.js";
 import { FilesystemBrowser } from "../core/FilesystemBrowser.js";
 
+import type {
+  RuntimeName,
+} from "../runtimes/RuntimeManager.js";
+
 /*
  * API / Gateway (seção 24, Fase F, e seção 5 do
  * SENIOR_MASTER_PLAN.md).
@@ -463,6 +467,8 @@ export function createGatewayServer(
           req
         )) as {
           objective?: string;
+          provider?: RuntimeName;
+          model?: string;
         };
 
       if (!body.objective) {
@@ -477,7 +483,12 @@ export function createGatewayServer(
       const plan =
         await orchestrator.createPlan(
           params.id,
-          body.objective
+          body.objective,
+          {
+            provider:
+              body.provider,
+            model: body.model,
+          }
         );
 
       sendJson(res, 201, {
@@ -489,11 +500,24 @@ export function createGatewayServer(
   route(
     "POST",
     "/projects/:id/tasks/:taskId/execute",
-    async (_req, res, params) => {
+    async (req, res, params) => {
+      const body =
+        (await readJsonBody(
+          req
+        )) as {
+          provider?: RuntimeName;
+          model?: string;
+        };
+
       const execution =
         await orchestrator.executeTask(
           params.id,
-          params.taskId
+          params.taskId,
+          {
+            provider:
+              body.provider,
+            model: body.model,
+          }
         );
 
       sendJson(res, 200, {
@@ -505,11 +529,24 @@ export function createGatewayServer(
   route(
     "POST",
     "/projects/:id/tasks/:taskId/correct",
-    async (_req, res, params) => {
+    async (req, res, params) => {
+      const body =
+        (await readJsonBody(
+          req
+        )) as {
+          provider?: RuntimeName;
+          model?: string;
+        };
+
       const execution =
         await orchestrator.correctTask(
           params.id,
-          params.taskId
+          params.taskId,
+          {
+            provider:
+              body.provider,
+            model: body.model,
+          }
         );
 
       sendJson(res, 200, {

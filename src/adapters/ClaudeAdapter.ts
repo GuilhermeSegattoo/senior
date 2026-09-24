@@ -1,0 +1,249 @@
+import { spawn } from "node:child_process";
+
+import { resolveGlobalCli } from "./resolveGlobalCli.js";
+
+/*
+ * Diferente do CodexAdapter (API key / conta ChatGPT via "codex
+ * login"), este adapter usa a assinatura do Claude já autenticada
+ * no CLI "claude" (Claude Code) da máquina — sem chave de API
+ * própria do Senior. Se "claude" nunca foi autenticado
+ * (`claude /login`), as chamadas vão falhar com uma mensagem do
+ * próprio CLI explicando isso.
+ *
+ * NÃO adicione "--bare" aqui: esse modo pula leitura do keychain do
+ * SO (é onde a sessão da assinatura fica salva), então toda chamada
+ * volta "Not logged in" mesmo com o CLI autenticado normalmente.
+ * Confirmado testando manualmente antes de escrever este adapter.
+ */
+export type ClaudeSandbox =
+  | "read-only"
+  | "workspace-write";
+
+export interface ClaudeAskOptions {
+  cwd?: string;
+  sandbox?: ClaudeSandbox;
+  model?: string;
+}
+
+interface ClaudeResultPayload {
+  type?: string;
+  subtype?: string;
+  is_error?: boolean;
+  result?: string;
+}
+
+function resolveClaudeCommand() {
+  return resolveGlobalCli(
+    "claude",
+    [
+      "node_modules",
+      "@anthropic-ai",
+      "claude-code",
+      "bin",
+      "claude.exe",
+    ]
+  );
+}
+
+export class ClaudeAdapter {
+  private defaultModel =
+    "claude-sonnet-5";
+
+  private timeoutMs = 600_000;
+
+  async ask(
+    prompt: string,
+    options: ClaudeAskOptions = {}
+  ): Promise<string> {
+    const {
+      command,
+      prefixArgs,
+    } = await resolveClaudeCommand();
+
+    return new Promise(
+      (resolve, reject) => {
+        const cwd =
+          options.cwd ??
+          process.cwd();
+
+        const permissionMode =
+          (options.sandbox ??
+            "read-only") ===
+          "workspace-write"
+            ? "bypassPermissions"
+            : "plan";
+
+        const model =
+          options.model ??
+          this.defaultModel;
+
+        const args = [
+          ...prefixArgs,
+          "-p",
+          prompt,
+          "--output-format",
+          "json",
+          "--model",
+          model,
+          "--permission-mode",
+          permissionMode,
+        ];
+
+        const child = spawn(
+          command,
+          args,
+          {
+            cwd,
+            stdio: [
+              "ignore",
+              "pipe",
+              "pipe",
+            ],
+          }
+        );
+
+        let stdout = "";
+        let stderr = "";
+        let settled = false;
+
+        child.stdout.on(
+          "data",
+          (data) => {
+            stdout +=
+              data.toString();
+          }
+        );
+
+        child.stderr.on(
+          "data",
+          (data) => {
+            stderr +=
+              data.toString();
+          }
+        );
+
+        const timeout =
+          setTimeout(() => {
+            if (settled) return;
+
+            settled = true;
+            child.kill(
+              "SIGTERM"
+            );
+
+            reject(
+              new Error(
+                `Claude excedeu o limite de ${
+                  this.timeoutMs /
+                  1000
+                } segundos.`
+              )
+            );
+          }, this.timeoutMs);
+
+        child.on(
+          "error",
+          (error) => {
+            if (settled) return;
+
+            settled = true;
+            clearTimeout(timeout);
+            reject(error);
+          }
+        );
+
+        child.on(
+          "close",
+          (code) => {
+            if (settled) return;
+
+            settled = true;
+            clearTimeout(timeout);
+
+            if (code !== 0) {
+              reject(
+                new Error(
+                  `Claude terminou com código ${code}.\n${stderr}`
+                )
+              );
+              return;
+            }
+
+            let payload: ClaudeResultPayload;
+
+            try {
+              payload = JSON.parse(
+                stdout.trim()
+              );
+            } catch (error) {
+              reject(
+                new Error(
+                  `Falha ao interpretar resposta do Claude: ${
+                    error instanceof
+                    Error
+                      ? error.message
+                      : String(
+                          error
+                        )
+                  }\n${stdout}`
+                )
+              );
+              return;
+            }
+
+            if (
+              payload.is_error ||
+              !payload.result
+            ) {
+              reject(
+                new Error(
+                  `Claude retornou erro: ${
+                    payload.result ??
+                    JSON.stringify(
+                      payload
+                    )
+                  }`
+                )
+              );
+              return;
+            }
+
+            resolve(
+              payload.result.trim()
+            );
+          }
+        );
+      }
+    );
+  }
+
+  async status(): Promise<boolean> {
+    const {
+      command,
+      prefixArgs,
+    } = await resolveClaudeCommand();
+
+    return new Promise(
+      (resolve) => {
+        const child = spawn(
+          command,
+          [
+            ...prefixArgs,
+            "--version",
+          ],
+          { stdio: "ignore" }
+        );
+
+        child.on("error", () =>
+          resolve(false)
+        );
+
+        child.on(
+          "close",
+          (code) =>
+            resolve(code === 0)
+        );
+      }
+    );
+  }
+}
