@@ -291,9 +291,9 @@ async function main() {
         "lint"
       );
 
-    if (!lintResult.success) {
+    if (lintResult.success || lintResult.exitCode === 0) {
       throw new Error(
-        `Check "lint" sem script configurado deveria ser tratado como sem pendências. Resultado: ${JSON.stringify(lintResult)}`
+        `Check "lint" sem script configurado não pode ser aprovado sem evidência. Resultado: ${JSON.stringify(lintResult)}`
       );
     }
 
@@ -308,7 +308,7 @@ async function main() {
     }
 
     console.log(
-      "OK: run_project_check reporta claramente um script não configurado em vez de falhar."
+      "OK: run_project_check reporta claramente um script não configurado e impede aprovação sem evidência."
     );
 
     console.log(

@@ -4,19 +4,37 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "senior": "tsx src/cli/index.ts"
+    "test": "node --import tsx --test src/tests/*.test.ts scripts/*.test.mjs",
+    "senior": "tsx src/cli/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "start": "node dist/cli/index.js gateway start",
+    "gateway": "node --env-file-if-exists=.env --import tsx src/cli/index.ts gateway start",
+    "check": "npm run typecheck && npm test",
+    "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "test:coverage": "c8 --all --include \"src/**/*.ts\" --exclude \"src/tests/**\" --reporter=text --reporter=json-summary --reporter=lcov --reporter=html npm test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@earendil-works/pi-agent-core": "^0.85.1",
-    "@earendil-works/pi-ai": "^0.85.1",
-    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "@earendil-works/pi-agent-core": "^0.99.2",
+    "@earendil-works/pi-ai": "^0.99.2",
+    "@earendil-works/pi-coding-agent": "^0.99.2"
+  },
+  "engines": {
+    "node": ">=22.19.0 <25"
+  },
+  "devDependencies": {
+    "c8": "^12.0.0",
+    "yaml": "^2.9.1",
     "@types/node": "^26.6.1",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "undici": "^8.10.2",
+    "brace-expansion": "^5.0.12"
   }
 }

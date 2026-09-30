@@ -1,4 +1,4 @@
-import { lstat, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { WorkspaceGuard } from "./WorkspaceGuard.js";
@@ -32,7 +32,16 @@ export class WriteProjectFileTool {
     const parent = path.dirname(resolved);
 
     const realWorkspace = await realpath(this.guard.root);
-    const realParent = await realpath(parent);
+    let realParent = realWorkspace;
+    const segments = path.relative(this.guard.root, parent).split(path.sep).filter(Boolean);
+    for (const segment of segments) {
+      const target = path.join(realParent, segment);
+      await mkdir(target).catch((error: NodeJS.ErrnoException) => { if (error.code !== "EEXIST") throw error; });
+      const canonical = await realpath(target);
+      const relative = path.relative(realWorkspace, canonical);
+      if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error("Diretório fora do workspace bloqueado.");
+      realParent = canonical;
+    }
 
     const relative = path.relative(
       realWorkspace,

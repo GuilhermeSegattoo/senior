@@ -1,3 +1,4 @@
+import { prepareCodexConversation, codexConversationArgs } from "./CodexConversation.js";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -16,6 +17,9 @@ export type CodexSandbox =
 export interface CodexAskOptions {
   cwd?: string;
   sandbox?: CodexSandbox;
+  model?: string;
+  signal?: AbortSignal;
+  conversationOnly?: boolean;
 }
 
 function resolveCodexCommand() {
@@ -29,7 +33,8 @@ function resolveCodexCommand() {
 }
 
 export class CodexAdapter {
-  private model = "gpt-6-astra";
+  constructor(private readonly resolveCommand = resolveCodexCommand) {}
+  private model = process.env.SENIOR_CODEX_MODEL;
   private timeoutMs = 600_000;
 
   async ask(
@@ -39,11 +44,12 @@ export class CodexAdapter {
     const {
       command,
       prefixArgs,
-    } = await resolveCodexCommand();
+    } = await this.resolveCommand();
 
-    return new Promise((resolve, reject) => {
-      const cwd = options.cwd ?? process.cwd();
-      const sandbox = options.sandbox ?? "read-only";
+    const conversation = options.conversationOnly ? await prepareCodexConversation() : undefined;
+    try { return await new Promise<string>((resolve, reject) => {
+      const cwd = conversation?.cwd ?? options.cwd ?? process.cwd();
+      const sandbox = options.conversationOnly ? "read-only" : options.sandbox ?? "read-only";
 
       const args = [
         ...prefixArgs,
@@ -54,14 +60,16 @@ export class CodexAdapter {
         sandbox,
         "--cd",
         cwd,
-        "-c",
-        `model="${this.model}"`,
+        ...((options.model ?? this.model) ? ["-c", `model=${JSON.stringify(options.model ?? this.model)}`] : []),
+        ...(options.conversationOnly ? codexConversationArgs : []),
         prompt,
       ];
 
       const child = spawn(command, args, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
+        signal: options.signal,
+        env: conversation?.env,
       });
 
       let finalResponse = "";
@@ -175,14 +183,14 @@ export class CodexAdapter {
 
         resolve(finalResponse.trim());
       });
-    });
+    }); } finally { await conversation?.dispose(); }
   }
 
   async status(): Promise<boolean> {
     const {
       command,
       prefixArgs,
-    } = await resolveCodexCommand();
+    } = await this.resolveCommand();
 
     return new Promise((resolve) => {
       const child = spawn(
@@ -202,7 +210,7 @@ export class CodexAdapter {
     const {
       command,
       prefixArgs,
-    } = await resolveCodexCommand();
+    } = await this.resolveCommand();
 
     return new Promise((resolve) => {
       const child = spawn(

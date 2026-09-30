@@ -1,0 +1,158 @@
+name: Senior checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    outputs:
+      nodes: ${{ steps.matrix.outputs.nodes }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: matrix
+        shell: python
+        run: |
+          import json, os, pathlib, re
+          version = pathlib.Path('.nvmrc').read_text().strip()
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version)
+          previous = str(int(version.split('.')[0]) - 2)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('nodes=' + json.dumps([version, previous]) + '\n')
+  lint:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run lint
+      - run: npm run lint
+        working-directory: apps/web
+  typecheck:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run typecheck
+      - run: npm run typecheck
+        working-directory: apps/web
+  backend-tests:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run test:coverage
+        working-directory: .
+      - name: Coverage summary
+        if: always()
+        run: node scripts/report-coverage.mjs ./coverage/coverage-summary.json 'backend / Node ${{ matrix.node }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-backend-node-${{ matrix.node }}
+          path: ./coverage/
+          if-no-files-found: error
+          retention-days: 14
+  web-tests:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run test:coverage
+        working-directory: apps/web
+      - name: Coverage summary
+        if: always()
+        run: node scripts/report-coverage.mjs apps/web/coverage/coverage-summary.json 'web / Node ${{ matrix.node }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-web-node-${{ matrix.node }}
+          path: apps/web/coverage/
+          if-no-files-found: error
+          retention-days: 14
+  build:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run build
+      - run: npm run build
+        working-directory: apps/web

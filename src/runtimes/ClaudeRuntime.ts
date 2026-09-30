@@ -22,8 +22,7 @@ export class ClaudeRuntime implements AgentRuntime {
   ) {
     this.adapter = adapter;
     this.model =
-      options.model ??
-      "claude-sonnet-5";
+      options.model || process.env.SENIOR_CLAUDE_MODEL || "sonnet";
   }
 
   async ask(
@@ -32,6 +31,8 @@ export class ClaudeRuntime implements AgentRuntime {
   ): Promise<AgentRuntimeResult> {
     const text = await this.adapter.ask(prompt, {
       cwd: options.cwd,
+      signal: options.signal,
+      conversationOnly: options.conversationOnly,
       model: this.model,
       sandbox: options.readOnly
         ? "read-only"

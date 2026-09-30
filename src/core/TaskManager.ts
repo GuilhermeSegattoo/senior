@@ -1,7 +1,8 @@
+import { atomicWrite as writeFile } from "./AtomicFile.js";
+import { withStateLock } from "./StateLock.js";
 import {
   mkdir,
   readFile,
-  writeFile,
 } from "node:fs/promises";
 
 import path from "node:path";
@@ -55,7 +56,7 @@ export class TaskManager {
     );
   }
 
-  async savePlan(
+  private async savePlanUnlocked(
     plan: ExecutionPlan
   ): Promise<ManagedPlan> {
     const tasks: ManagedTask[] =
@@ -109,7 +110,7 @@ export class TaskManager {
     }
   }
 
-  async startTask(
+  private async startTaskUnlocked(
     projectId: string,
     taskId: string
   ): Promise<ManagedPlan> {
@@ -156,7 +157,7 @@ export class TaskManager {
     return plan;
   }
 
-  async retryTask(
+  private async retryTaskUnlocked(
     projectId: string,
     taskId: string
   ): Promise<ManagedPlan> {
@@ -210,7 +211,7 @@ export class TaskManager {
     return plan;
   }
 
-  async setTaskGitMetadata(
+  private async setTaskGitMetadataUnlocked(
     projectId: string,
     taskId: string,
     metadata: TaskGitMetadata
@@ -236,7 +237,7 @@ export class TaskManager {
     return plan;
   }
 
-  async setTaskValidation(
+  private async setTaskValidationUnlocked(
     projectId: string,
     taskId: string,
     validation: TaskValidation
@@ -262,7 +263,7 @@ export class TaskManager {
     return plan;
   }
 
-  async finishTask(
+  private async finishTaskUnlocked(
     projectId: string,
     taskId: string,
     result: string,
@@ -328,7 +329,7 @@ export class TaskManager {
     );
   }
 
-  async startCorrection(
+  private async startCorrectionUnlocked(
     projectId: string,
     taskId: string
   ): Promise<ManagedPlan> {
@@ -369,7 +370,7 @@ export class TaskManager {
     return plan;
   }
 
-  async applyValidationResult(
+  private async applyValidationResultUnlocked(
     projectId: string,
     taskId: string,
     status:
@@ -425,7 +426,7 @@ export class TaskManager {
     return plan;
   }
 
-  async setPlanValidation(
+  private async setPlanValidationUnlocked(
     projectId: string,
     validation: PlanValidation
   ): Promise<ManagedPlan> {
@@ -441,7 +442,7 @@ export class TaskManager {
     return plan;
   }
 
-  async failTask(
+  private async failTaskUnlocked(
     projectId: string,
     taskId: string,
     error: string
@@ -468,7 +469,7 @@ export class TaskManager {
     return plan;
   }
 
-  async updateTaskStatus(
+  private async updateTaskStatusUnlocked(
     projectId: string,
     taskId: string,
     status: TaskStatus
@@ -661,4 +662,61 @@ export class TaskManager {
       }
     }
   }
+  async savePlan(...args: Parameters<TaskManager["savePlanUnlocked"]>): ReturnType<TaskManager["savePlanUnlocked"]> {
+    return withStateLock(`plan:${args[0].projectId}`, () => this.savePlanUnlocked(...args));
+  }
+
+  async startTask(...args: Parameters<TaskManager["startTaskUnlocked"]>): ReturnType<TaskManager["startTaskUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.startTaskUnlocked(...args));
+  }
+
+  async retryTask(...args: Parameters<TaskManager["retryTaskUnlocked"]>): ReturnType<TaskManager["retryTaskUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.retryTaskUnlocked(...args));
+  }
+
+  async setTaskGitMetadata(...args: Parameters<TaskManager["setTaskGitMetadataUnlocked"]>): ReturnType<TaskManager["setTaskGitMetadataUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.setTaskGitMetadataUnlocked(...args));
+  }
+
+  async setTaskValidation(...args: Parameters<TaskManager["setTaskValidationUnlocked"]>): ReturnType<TaskManager["setTaskValidationUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.setTaskValidationUnlocked(...args));
+  }
+
+  async finishTask(...args: Parameters<TaskManager["finishTaskUnlocked"]>): ReturnType<TaskManager["finishTaskUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.finishTaskUnlocked(...args));
+  }
+
+  async startCorrection(...args: Parameters<TaskManager["startCorrectionUnlocked"]>): ReturnType<TaskManager["startCorrectionUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.startCorrectionUnlocked(...args));
+  }
+
+  async applyValidationResult(...args: Parameters<TaskManager["applyValidationResultUnlocked"]>): ReturnType<TaskManager["applyValidationResultUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.applyValidationResultUnlocked(...args));
+  }
+
+  async setPlanValidation(...args: Parameters<TaskManager["setPlanValidationUnlocked"]>): ReturnType<TaskManager["setPlanValidationUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.setPlanValidationUnlocked(...args));
+  }
+
+  async failTask(...args: Parameters<TaskManager["failTaskUnlocked"]>): ReturnType<TaskManager["failTaskUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.failTaskUnlocked(...args));
+  }
+
+  async updateTaskStatus(...args: Parameters<TaskManager["updateTaskStatusUnlocked"]>): ReturnType<TaskManager["updateTaskStatusUnlocked"]> {
+    return withStateLock(`plan:${args[0]}`, () => this.updateTaskStatusUnlocked(...args));
+  }
+
+  async markInterrupted(projectId: string, reason: string) {
+    return withStateLock(`plan:${projectId}`, async () => {
+      const plan = await this.getPlan(projectId);
+      if (!plan) return;
+      for (const task of plan.tasks) {
+        if (["RUNNING", "VALIDATING"].includes(task.status) || (task.status === "DONE" && this.hasValidationRequirements(task))) {
+          task.status = "FAILED"; task.error = reason; task.completedAt = new Date().toISOString();
+        }
+      }
+      await this.writePlan(plan);
+    });
+  }
+
 }

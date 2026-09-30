@@ -33,6 +33,7 @@ export interface LoginHandle {
     ) => void
   ): void;
   kill(): void;
+  onUrl?(callback: (url: string) => void): void;
 }
 
 const URL_PATTERN = /https?:\/\/\S+/;
@@ -60,6 +61,8 @@ export function spawnLoginProcess(
     null;
 
   let settled = false;
+  let cancelled = false;
+  let urlCallback: ((url: string) => void) | undefined;
   let stdout = "";
   let stderr = "";
 
@@ -86,6 +89,7 @@ export function spawnLoginProcess(
 
   const ready = commandPromise
     .then(({ command, args }) => {
+      if (cancelled) return;
       const proc = spawn(
         command,
         args,
@@ -120,6 +124,7 @@ export function spawnLoginProcess(
 
           if (match) {
             resolvedUrl = match[0];
+            urlCallback?.(resolvedUrl);
             flushUrlWaiters(
               resolvedUrl
             );
@@ -237,7 +242,13 @@ export function spawnLoginProcess(
       exitCallback = callback;
     },
 
+    onUrl(callback) {
+      urlCallback = callback;
+      if (resolvedUrl) callback(resolvedUrl);
+    },
+
     kill() {
+      cancelled = true;
       child?.kill("SIGTERM");
     },
   };
@@ -289,9 +300,7 @@ export function parseClaudeAuthStatus(
     ) as ClaudeAuthStatusPayload;
 
     return {
-      loggedIn: Boolean(
-        payload.loggedIn
-      ),
+      loggedIn: payload.loggedIn === true,
       detail: payload.loggedIn
         ? `Conectado como ${payload.email ?? "?"} (${
             payload.subscriptionType ??

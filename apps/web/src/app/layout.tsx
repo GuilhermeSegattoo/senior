@@ -26,6 +26,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Senior",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Senior", statusBarStyle: "black-translucent" },
   description:
     "Ambiente operacional de engenharia de software com agentes autônomos supervisionados.",
 };
@@ -44,7 +46,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <header className="shrink-0 border-b border-line bg-panel/60 backdrop-blur-sm">
-          <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center justify-between px-3 py-4 md:px-6">
             <div className="flex items-baseline gap-2">
               <Link
                 href="/"
@@ -62,7 +64,9 @@ export default function RootLayout({
               </Link>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 md:gap-4">
+              <Link href="/assistant" className="font-mono text-[11px] uppercase tracking-wider text-signal">Assistente</Link>
+              <Link href="/login" className="font-mono text-[11px] text-mute">Entrar</Link>
               <Link
                 href="/settings"
                 className="font-mono text-[11px] uppercase tracking-wider text-mute hover:text-signal"
@@ -70,7 +74,7 @@ export default function RootLayout({
                 provedores
               </Link>
 
-              <GatewayStatus />
+              <div className="hidden sm:block"><GatewayStatus /></div>
             </div>
           </div>
         </header>

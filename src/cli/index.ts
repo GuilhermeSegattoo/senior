@@ -1200,13 +1200,15 @@ async function main() {
     const server =
       createGatewayServer();
 
-    server.listen(port, () => {
+    const host = process.env.SENIOR_GATEWAY_HOST || "127.0.0.1";
+    if (host !== "127.0.0.1" && !process.env.SENIOR_GATEWAY_TOKEN) throw new Error("Acesso remoto exige SENIOR_GATEWAY_TOKEN.");
+    server.listen(port, host, () => {
       console.log(
         `\nSENIOR GATEWAY rodando em http://localhost:${port}`
       );
 
       console.log(
-        "Sem autenticação — pensado para uso local.\n"
+        process.env.SENIOR_GATEWAY_TOKEN ? "Gateway autenticado.\n" : "Acesso local em loopback.\n"
       );
     });
 

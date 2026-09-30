@@ -196,21 +196,11 @@ isoladamente pareça correta.
       );
     }
 
-    const record =
-      parsed as {
-        passed?: unknown;
-        reasoning?: unknown;
-      };
-
-    return {
-      passed: Boolean(
-        record.passed
-      ),
-
-      reasoning: String(
-        record.reasoning ??
-          "Sem justificativa."
-      ),
-    };
+    if (!parsed || typeof parsed !== "object") throw new Error("Veredito final inválido.");
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.passed !== "boolean" || typeof record.reasoning !== "string" || !record.reasoning.trim()) {
+      throw new Error("Validação final exige passed booleano e reasoning não vazio.");
+    }
+    return { passed: record.passed, reasoning: record.reasoning };
   }
 }

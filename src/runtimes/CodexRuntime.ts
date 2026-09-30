@@ -11,7 +11,7 @@ export class CodexRuntime implements AgentRuntime {
 
   private readonly adapter: CodexAdapter;
 
-  constructor(adapter = new CodexAdapter()) {
+  constructor(adapter = new CodexAdapter(), private readonly model = process.env.SENIOR_CODEX_MODEL) {
     this.adapter = adapter;
   }
 
@@ -21,7 +21,10 @@ export class CodexRuntime implements AgentRuntime {
   ): Promise<AgentRuntimeResult> {
     const text = await this.adapter.ask(prompt, {
       cwd: options.cwd,
-      sandbox: options.readOnly
+      model: this.model,
+      signal: options.signal,
+      conversationOnly: options.conversationOnly,
+      sandbox: (options.conversationOnly || options.readOnly)
         ? "read-only"
         : "workspace-write",
     });
@@ -29,7 +32,7 @@ export class CodexRuntime implements AgentRuntime {
     return {
       text,
       provider: "openai",
-      model: "gpt-6-astra",
+      model: this.model,
     };
   }
 

@@ -110,6 +110,7 @@ export interface PlanGateWarning {
 }
 
 export interface PlanValidation {
+  integration?: { workspacePath: string; branch: string; headCommit: string; checks: ValidationAttempt[] };
   status: Extract<
     ValidationStatus,
     "PASSED" | "FAILED"

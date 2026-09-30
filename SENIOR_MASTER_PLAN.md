@@ -1,10 +1,14 @@
 # SENIOR --- Documento Mestre do Projeto
 
-**Status:** Em desenvolvimento\
+**Status:** Em desenvolvimento — núcleo persistente do assistente implementado, deploy remoto pendente\
 **Objetivo deste documento:** ser a fonte única de contexto para humanos
 e agentes de IA que continuarem o desenvolvimento do Senior.
 
 ------------------------------------------------------------------------
+
+## Atualização de implementação — 30/09/2026
+
+Veja [estado e validações](docs/JARVIS_STATUS.md), [decisão de arquitetura](docs/ADR-001-brain.md) e [runbook de publicação privada](deploy/README.md). Esses arquivos registram a entrega atual e suas limitações; o restante deste documento mantém a visão e o histórico do projeto.
 
 ## 1. Visão do produto
 

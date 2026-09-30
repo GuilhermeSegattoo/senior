@@ -1,6 +1,9 @@
 export interface AgentRuntimeOptions {
   cwd: string;
   readOnly?: boolean;
+  signal?: AbortSignal;
+  conversationOnly?: boolean;
+  allowProjectChecks?: boolean;
 }
 
 export interface AgentRuntimeResult {

@@ -90,9 +90,9 @@ export class RunProjectCheckTool {
       return {
         check,
         command: `(script "${selected.npmScript}" não configurado em package.json)`,
-        exitCode: 0,
-        success: true,
-        output: `Nenhum script "${selected.npmScript}" configurado no package.json deste projeto. Check considerado sem pendências.`,
+        exitCode: 1,
+        success: false,
+        output: `Nenhum script "${selected.npmScript}" configurado no package.json deste projeto. Não há evidência para aprovar este check obrigatório.`,
       };
     }
 
