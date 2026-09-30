@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   correctTaskApi,
+  retryTaskApi,
   executeTaskApi,
   type ManagedTask,
   type Provider,
@@ -102,7 +103,7 @@ export function TaskDetailPanel({
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 flex w-96 flex-col border-l border-line bg-panel-raised">
+    <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-96 flex-col border-l border-line bg-panel-raised">
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-wider text-mute">
@@ -171,6 +172,13 @@ export function TaskDetailPanel({
           </>
         )}
 
+        {task.validation && <section className="mb-5 rounded border border-line p-3">
+          <h3 className="mb-2 text-sm text-ok">Validação: {task.validation.status}</h3>
+          {task.validation.blockedReason && <p className="text-xs text-danger">{task.validation.blockedReason}</p>}
+          {task.validation.attempts.map(attempt => <details key={attempt.attempt} className="mb-2 text-xs"><summary>Tentativa {attempt.attempt}</summary><p className="my-2 whitespace-pre-wrap">{attempt.diagnosis}</p>{attempt.checks.map(check => <div key={check.check} className="my-2"><p>{check.check}: {check.status}</p><p className="text-danger">{check.failureReason}</p>{check.evidence?.output && <pre className="max-h-48 overflow-auto whitespace-pre-wrap bg-ink p-2">{check.evidence.output}</pre>}</div>)}{attempt.criteria.map(criterion => <div key={criterion.id} className="my-2"><p>{criterion.description}: {criterion.status}</p><p>{criterion.failureReason}</p>{criterion.evidence?.map((evidence, index) => <p key={index}>{evidence.description}</p>)}</div>)}</details>)}
+        </section>}
+        {task.status === "FAILED" && <button disabled={running} onClick={() => { setRunning(true); void retryTaskApi(projectId, task.id).then(onChanged).catch(err => setError(err instanceof Error ? err.message : "Falha ao preparar tentativa.")).finally(() => setRunning(false)); }} className="mb-4 rounded border border-signal px-3 py-2 text-xs text-signal">Preparar nova tentativa após revisão</button>}
+        {error && !canDispatch && <p className="text-xs text-danger">{error}</p>}
         {task.result && (
           <>
             <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-mute">

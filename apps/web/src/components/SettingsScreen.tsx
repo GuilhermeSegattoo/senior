@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   fetchProviderLoginSession,
+  cancelProviderLogin,
+  fetchCapabilities,
   fetchProvidersStatus,
   startProviderLogin,
   type AuthProviderName,
@@ -69,6 +71,8 @@ function statusDotColor(
 }
 
 export function SettingsScreen() {
+  const [capabilities, setCapabilities] = useState<Array<{ name: string; configured?: boolean; mode: string; coding: boolean }>>([]);
+  const [statusError, setStatusError] = useState("");
   const [status, setStatus] = useState<
     | Record<
         AuthProviderName,
@@ -110,6 +114,7 @@ export function SettingsScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    fetchCapabilities().then(value => { if (!cancelled) setCapabilities(value.providers); }).catch(err => setStatusError(err instanceof Error ? err.message : "Falha ao verificar conexões."));
 
     async function poll() {
       const data =
@@ -117,6 +122,7 @@ export function SettingsScreen() {
           () => null
         );
 
+      if (!data && !cancelled) setStatusError("Não foi possível verificar as conexões. Confira o gateway e seu login.");
       if (data && !cancelled) {
         setStatus(data);
       }
@@ -182,7 +188,7 @@ export function SettingsScreen() {
       return;
     }
 
-    if (session.status === "failed") {
+    if (["failed", "cancelled", "expired"].includes(session.status)) {
       setLoginState(provider, {
         kind: "failed",
         message: session.message,
@@ -273,6 +279,7 @@ export function SettingsScreen() {
         hora de disparar.
       </p>
 
+      {statusError && <p role="alert" className="mt-4 text-sm text-danger">{statusError}</p>}
       <div className="mt-8 space-y-4">
         {PROVIDERS.map((provider) => {
           const providerStatus =
@@ -382,10 +389,9 @@ export function SettingsScreen() {
                     </p>
                   )}
 
+                  <button type="button" onClick={() => { void cancelProviderLogin(provider.id).then(() => { stopPolling(provider.id); setLoginState(provider.id, { kind: "idle" }); }).catch(err => setStatusError(String(err))); }} className="mt-2 text-xs text-signal">Cancelar tentativa</button>
                   <p className="mt-1 text-[11px] text-mute">
-                    Aguardando você
-                    concluir o login no
-                    navegador…
+                    Conclua o login no ambiente onde o CLI está rodando. Em servidor remoto, um callback localhost pode exigir configuração adicional.
                   </p>
                 </div>
               )}
@@ -418,22 +424,7 @@ export function SettingsScreen() {
           );
         })}
 
-        <div className="rounded-lg border border-line border-dashed bg-panel-raised/50 p-5 opacity-60">
-          <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 rounded-full bg-mute"
-              aria-hidden="true"
-            />
-
-            <h2 className="font-display text-lg font-medium text-paper">
-              Grok
-            </h2>
-          </div>
-
-          <p className="mt-0.5 text-xs text-mute">
-            Ainda não integrado.
-          </p>
-        </div>
+        {capabilities.filter(p => ["grok", "openai", "anthropic", "pi"].includes(p.name)).map(provider => <div key={provider.name} className="rounded-lg border border-line bg-panel-raised p-5"><h2 className="font-display text-lg">{provider.name === "grok" ? "Grok" : provider.name === "anthropic" ? "Claude API" : provider.name === "openai" ? "OpenAI API" : "Pi"}</h2><p className={`mt-2 text-xs ${provider.configured ? "text-ok" : "text-mute"}`}>{provider.configured ? "Configuração disponível no servidor. Uma chamada real ainda confirma acesso e saldo." : "Configure credencial e modelo no servidor para habilitar."}</p><p className="mt-2 text-xs text-mute">{provider.coding ? "Execução com ferramentas autorizadas." : "Conversa e análise. Cobrança e acesso da API são verificados separadamente."}</p></div>)}
       </div>
     </div>
   );
