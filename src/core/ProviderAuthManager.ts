@@ -128,7 +128,7 @@ export class ProviderAuthManager {
     });
 
     handle.onExit(
-      (success, message) => {
+      (success) => {
         const current =
           this.sessions.get(
             provider

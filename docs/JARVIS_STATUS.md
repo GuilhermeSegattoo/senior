@@ -31,3 +31,9 @@ Esta é uma base funcional implementada e revisável. Não representa toda a vis
 ## Correções pré-merge — revisão do PR #1
 
 Issue P0 #9 vinculada à #2. Execução indireta em modo restrito bloqueada (Pi checks, imports e filesystem); Chief/planejamento conversationOnly; Codex usa home/workspace temporários, sem configuração herdada e sem shell/exec. PID acompanhado de boot-id/horário/process-start, migração preserva histórico e trata PID repetido. Locks ativos da instância continuam protegidos. Sinais reais SIGTERM/SIGINT interrompem rodadas e fecham o servidor. Login com backoff por IP confiável Traefik. Compose Dokploy sem Caddy, portas publicadas ou rede fixa; healthcheck web e backup VACUUM INTO com restauração testada. Compose validado com o binário oficial standalone. Aguardam revisão e validação no host.
+
+## Rodada de hardening e CI — 30/09/2026
+
+Política de execução fechada quando NODE_ENV está ausente; planejamento recebe árvore/README limitados e pode ler o projeto sem npm scripts quando explicitamente habilitado. Login suporta hops confiáveis configuráveis. Backup diário com retenção e ensaio de restauração; Schedule Dokploy e Volume Backup S3 criptografado documentados.
+
+CI inclui matriz Node 24/22, jobs separados com cache, cobertura medida/artifacts, CodeQL, audit, dependency review, gitleaks, Buildx/Trivy e smoke de Compose/login. Imagens publicadas no GHCR somente em futuros pushes na main após smoke. Dependabot cobre npm/Actions/Docker. PR continua draft; não houve merge ou deploy na VPS. As evidências finais dos workflows e tempos estão no PR.

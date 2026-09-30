@@ -1,64 +1,158 @@
 name: Senior checks
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  verify:
+  versions:
     runs-on: ubuntu-latest
+    outputs:
+      nodes: ${{ steps.matrix.outputs.nodes }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - id: matrix
+        shell: python
+        run: |
+          import json, os, pathlib, re
+          version = pathlib.Path('.nvmrc').read_text().strip()
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version)
+          previous = str(int(version.split('.')[0]) - 2)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('nodes=' + json.dumps([version, previous]) + '\n')
+  lint:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '24.19.0'
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: |
             package-lock.json
             apps/web/package-lock.json
       - run: npm ci --ignore-scripts
-      - run: npm run check
       - run: npm ci --ignore-scripts
         working-directory: apps/web
-      - run: npm test
-        working-directory: apps/web
+      - run: npm run lint
       - run: npm run lint
         working-directory: apps/web
+  typecheck:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run typecheck
+      - run: npm run typecheck
+        working-directory: apps/web
+  backend-tests:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run test:coverage
+        working-directory: .
+      - name: Coverage summary
+        if: always()
+        run: node scripts/report-coverage.mjs ./coverage/coverage-summary.json 'backend / Node ${{ matrix.node }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-backend-node-${{ matrix.node }}
+          path: ./coverage/
+          if-no-files-found: error
+          retention-days: 14
+  web-tests:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run test:coverage
+        working-directory: apps/web
+      - name: Coverage summary
+        if: always()
+        run: node scripts/report-coverage.mjs apps/web/coverage/coverage-summary.json 'web / Node ${{ matrix.node }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-web-node-${{ matrix.node }}
+          path: apps/web/coverage/
+          if-no-files-found: error
+          retention-days: 14
+  build:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.versions.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run build
       - run: npm run build
         working-directory: apps/web
-
-  docker-images:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      SENIOR_DOMAIN: senior.example.test
-      SENIOR_GATEWAY_TOKEN: fixture-gateway-token-01234567890123456789
-      SENIOR_WEB_PASSWORD: fixture-password-01234567890123456789
-      SENIOR_SESSION_SECRET: fixture-session-secret-01234567890123456789
-      SENIOR_TRUST_PROXY: "true"
-      SENIOR_TRUSTED_PROXY_HOPS: "1"
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate Dokploy Compose
-        run: docker compose -f compose.dokploy.yaml config
-      - name: Build API image
-        run: docker build --target api --tag senior-api:ci .
-      - name: Build web image
-        run: docker build --target web --tag senior-web:ci .
-      - name: Smoke test API image
-        run: |
-          docker run --detach --name senior-api-ci --env SENIOR_GATEWAY_TOKEN="$SENIOR_GATEWAY_TOKEN" senior-api:ci
-          for attempt in $(seq 1 20); do
-            if docker exec senior-api-ci node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then break; fi
-            if [ "$attempt" -eq 20 ]; then docker logs senior-api-ci; exit 1; fi
-            sleep 2
-          done
-      - name: Smoke test web image
-        run: |
-          docker run --detach --name senior-web-ci --env SENIOR_GATEWAY_TOKEN --env SENIOR_WEB_PASSWORD --env SENIOR_SESSION_SECRET senior-web:ci
-          for attempt in $(seq 1 20); do
-            if docker exec senior-web-ci node -e "fetch('http://127.0.0.1:3000/api/auth').then(async r=>{const b=await r.json();process.exit(r.ok&&b.configured?0:1)}).catch(()=>process.exit(1))"; then break; fi
-            if [ "$attempt" -eq 20 ]; then docker logs senior-web-ci; exit 1; fi
-            sleep 2
-          done
-      - name: Clean up smoke containers
-        if: always()
-        run: docker rm --force senior-api-ci senior-web-ci || true

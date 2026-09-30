@@ -60,9 +60,16 @@ test("daily snapshots retain N owned backups, leave unrelated files and preserve
   }finally{try{store.close();}catch{/* Already closed for the restore drill. */}await rm(directory,{recursive:true,force:true});}
 });
 
-test("Docker CI validates compose and builds both targets with fictitious secrets",()=>{
-  const workflow=parse(readFileSync(".github/workflows/ci.yml","utf8")),job=workflow.jobs["docker-images"];
-  const commands=job.steps.map((step:{run?:string})=>step.run||"").join("\n");
-  assert.match(commands,/docker compose -f compose\.dokploy\.yaml config/);assert.match(commands,/docker build --target api/);assert.match(commands,/docker build --target web/);
-  assert.match(job.env.SENIOR_GATEWAY_TOKEN,/^fixture-/);
+test("Docker CI validates Compose, scans both targets and gates publishing on main and smoke",()=>{
+  const workflow=parse(readFileSync(".github/workflows/docker.yml","utf8"));
+  const job=workflow.jobs.images;
+  assert.deepEqual(job.strategy.matrix.target,["api","web"]);
+  assert.match(job.steps.map((step:{run?:string})=>step.run||"").join("\n"),/docker compose -f compose\.dokploy\.yaml config/);
+  const build=job.steps.find((step:{uses?:string})=>step.uses?.startsWith("docker/build-push-action"));
+  assert.equal(build.with.target,"${{ matrix.target }}");assert.equal(build.with.load,true);assert.match(build.with["cache-to"],/type=gha/);
+  const scan=job.steps.find((step:{uses?:string})=>step.uses?.startsWith("aquasecurity/trivy-action"));assert.equal(scan.with["exit-code"],"1");
+  const smoke=workflow.jobs.smoke;assert.equal(smoke.needs,"images");assert.match(smoke.steps.map((step:{run?:string})=>step.run||"").join("\n"),/--no-build.*--wait/);
+  assert.equal(workflow.jobs.publish.needs,"smoke");assert.match(workflow.jobs.publish.if,/event_name == 'push'.*refs\/heads\/main/);
+  assert.equal(workflow.permissions["packages"],undefined);assert.equal(workflow.jobs.publish.permissions.packages,"write");
+  assert.match(workflow.env.SENIOR_GATEWAY_TOKEN,/^fixture-/);
 });

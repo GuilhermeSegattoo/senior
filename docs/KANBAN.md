@@ -7,6 +7,7 @@ Atualizado em 29/09/2026 (America/Sao_Paulo). Este é um quadro versionado em Ma
 | Estado | Prioridade | Cartão |
 | --- | --- | --- |
 | Em revisão | P0 | [Segurança de execução e recuperação após redeploy — #9](https://github.com/GuilhermeSegattoo/senior/issues/9) |
+| Em revisão | P0 | CI matriz, cobertura, segurança, imagens e smoke — evidências no PR #1 |
 | Em revisão | P0 | [Núcleo persistente, interface e preparação de deploy — PR #1](https://github.com/GuilhermeSegattoo/senior/pull/1) |
 | Bloqueado | P0 | [Publicação privada e validação das contas reais](https://github.com/GuilhermeSegattoo/senior/issues/2) |
 | A fazer | P0 | [Isolar worker de engenharia antes de habilitar código em produção](https://github.com/GuilhermeSegattoo/senior/issues/3) |

@@ -1,0 +1,119 @@
+name: Docker
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: docker-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  SENIOR_DOMAIN: senior.example.test
+  SENIOR_GATEWAY_TOKEN: fixture-gateway-token-01234567890123456789
+  SENIOR_WEB_PASSWORD: fixture-password-01234567890123456789
+  SENIOR_SESSION_SECRET: fixture-session-secret-01234567890123456789
+  SENIOR_TRUST_PROXY: 'true'
+  SENIOR_TRUSTED_PROXY_HOPS: '1'
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [api, web]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate Dokploy Compose
+        run: docker compose -f compose.dokploy.yaml config
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          tags: senior-${{ matrix.target }}:ci
+          load: true
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: senior-${{ matrix.target }}:ci
+          format: json
+          output: trivy-${{ matrix.target }}.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-${{ matrix.target }}
+          path: trivy-${{ matrix.target }}.json
+          if-no-files-found: warn
+          retention-days: 14
+      - run: docker save senior-${{ matrix.target }}:ci -o /tmp/image-${{ matrix.target }}.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.target }}
+          path: /tmp/image-${{ matrix.target }}.tar
+          compression-level: 0
+          retention-days: 1
+  smoke:
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: /tmp/images
+          merge-multiple: true
+      - run: |
+          docker load -i /tmp/images/image-api.tar
+          docker load -i /tmp/images/image-web.tar
+      - name: Start Dokploy stack and wait for healthchecks
+        run: docker compose -f compose.dokploy.yaml -f deploy/compose.smoke.yaml up --no-build --detach --wait --wait-timeout 180
+      - name: Login and cookie smoke test
+        run: node scripts/smoke-dokploy.mjs
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose -f compose.dokploy.yaml -f deploy/compose.smoke.yaml logs --tail 100
+      - name: Remove runner-only stack
+        if: always()
+        run: docker compose -f compose.dokploy.yaml -f deploy/compose.smoke.yaml down --volumes
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: /tmp/images
+          merge-multiple: true
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified images tagged with commit SHA
+        env:
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          for target in api web; do
+            docker load -i "/tmp/images/image-$target.tar"
+            image="ghcr.io/${REPOSITORY,,}/$target:$COMMIT_SHA"
+            docker tag "senior-$target:ci" "$image"
+            docker push "$image"
+          done
