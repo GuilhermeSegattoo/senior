@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.env
+**/.env.*
+**/.git
+data
+projects
+dist
+*.log
+.codex
+.claude
+.pi

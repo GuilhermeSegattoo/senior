@@ -1,0 +1,60 @@
+services:
+  api:
+    build:
+      context: .
+      target: api
+    env_file: .env
+    environment:
+      SENIOR_GATEWAY_HOST: 0.0.0.0
+    volumes:
+      - senior-data:/app/data
+      - senior-projects:/app/projects
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  web:
+    build:
+      context: .
+      target: web
+    environment:
+      SENIOR_PUBLIC_URL: https://${SENIOR_DOMAIN}
+      SENIOR_API_URL: http://api:4000
+      SENIOR_GATEWAY_TOKEN: ${SENIOR_GATEWAY_TOKEN:?Configure o token do gateway}
+      SENIOR_WEB_PASSWORD: ${SENIOR_WEB_PASSWORD:?Configure a senha}
+      SENIOR_SESSION_SECRET: ${SENIOR_SESSION_SECRET:?Configure o segredo de sessão}
+      SENIOR_COOKIE_SECURE: "true"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    pids_limit: 128
+  ingress:
+    image: caddy:2
+    environment:
+      SENIOR_DOMAIN: ${SENIOR_DOMAIN:?Configure o domínio}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
+    restart: unless-stopped
+volumes:
+  senior-data:
+  senior-projects:
+  caddy-data:
+  caddy-config:

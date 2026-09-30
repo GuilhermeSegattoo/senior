@@ -1,0 +1,11 @@
+{$SENIOR_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy web:3000 {
+    flush_interval -1
+  }
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy same-origin
+    Strict-Transport-Security "max-age=31536000"
+  }
+}

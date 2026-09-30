@@ -1,0 +1,24 @@
+name: Senior checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - run: npm run lint
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
