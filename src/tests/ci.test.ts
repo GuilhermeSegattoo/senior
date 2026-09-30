@@ -37,3 +37,13 @@ test('installed Pi dependencies use patched versions, not its embedded shrinkwra
   assert.ok(brace.version.split('.').map(Number)[0]===5 && Number(brace.version.split('.')[2])>=12,`Unsafe installed brace-expansion ${brace.version}`);
   const [major,minor,patch]=undici.version.split('.').map(Number);assert.ok(major===8&&(minor>10||(minor===10&&patch>=2)),`Unsafe installed undici ${undici.version}`);
 });
+
+test('runtime images omit backend compilers and start without global npm',()=>{
+  const pkg=JSON.parse(readFileSync('package.json','utf8'));
+  for(const name of ['tsx','typescript','@types/node']){assert.equal(pkg.dependencies[name],undefined);assert.ok(pkg.devDependencies[name]);}
+  const docker=readFileSync('Dockerfile','utf8');
+  assert.match(docker,/AS api-deps[\s\S]*npm ci --omit=dev --ignore-scripts/);
+  assert.match(docker,/COPY --from=api-deps \/app\/node_modules/);
+  assert.match(docker,/apt-get upgrade -y/);
+  assert.match(docker,/CMD \["node", "node_modules\/next\/dist\/bin\/next"/);
+});

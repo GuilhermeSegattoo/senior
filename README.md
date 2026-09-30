@@ -60,3 +60,5 @@ Em push para `main`, somente após imagens e smoke aprovados, publica `ghcr.io/g
 Local: `npm run lint`, `npm run check`, `npm run build`, `npm run test:coverage`; no web, `npm run lint`, `npm run typecheck`, `npm run test:coverage` e `npm run build`. O SDK Pi foi atualizado em conjunto para 0.99.2. O lock da aplicação usa brace-expansion 5.0.12 e torna o lock superior autoritativo (`hasShrinkwrap: false` no SDK), pois o shrinkwrap publicado ainda prende 5.0.9 e npm ignora overrides nesse caso. Um teste confere as versões efetivamente instaladas de brace-expansion e undici após `npm ci`; não basta auditar metadados. Revise esse ajuste a cada atualização do SDK ou regeneração do lock.
 
 Dependency review exige **Settings → Security → Dependency graph** habilitado no GitHub. Se estiver desligado, o job falha explicitamente; não é ignorado nem marcado como aprovado.
+
+As imagens finais atualizam os pacotes Debian, removem o npm global e a API instala somente dependências de produção. O web inicia Next diretamente via Node. Compilador e tsx ficam no estágio de build/desenvolvimento; execução de engenharia em produção continua desligada.
