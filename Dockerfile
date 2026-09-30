@@ -21,6 +21,7 @@ COPY --from=backend /app/node_modules ./node_modules
 COPY --from=backend /app/dist ./dist
 COPY --from=backend /app/package*.json ./
 COPY --from=backend /app/agents ./agents
+COPY deploy/backup-sqlite.mjs ./deploy/backup-sqlite.mjs
 RUN mkdir -p /app/data /app/projects && chown -R node:node /app/data /app/projects
 USER node
 ENV NODE_ENV=production SENIOR_GATEWAY_HOST=0.0.0.0

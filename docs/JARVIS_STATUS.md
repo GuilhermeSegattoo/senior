@@ -10,11 +10,11 @@
 - Proxy web privado, sessão assinada HttpOnly, verificação de origem, gateway com token, limite de corpo e login limitado.
 - Correções em parsing de veredictos, check obrigatório ausente, autenticação CLI assíncrona, escrita segura de diretórios e concorrência de arquivos JSON.
 - Planos validados como DAG, critérios de aceitação e revisão exigidos para implementação, validação final sobre commits integrados em worktree separada.
-- Docker/Compose/Caddy e CI preparados para a primeira instalação privada de conversa.
+- Docker/Compose/Dokploy/Traefik e CI preparados para a primeira instalação privada de conversa.
 
 ## Evidências de validação
 
-Typecheck do backend; 9 testes novos de memória, coordenação, cancelamento, gateway, integração Git, schema, locks e adaptadores; 18 scripts de regressão pertinentes; lint e build de produção do frontend. Navegador de produção com runtime simulado: login, senha incorreta recusada, cookie HttpOnly/Strict, mutation de origem externa recusada, logout, conversa, memória, reload e viewport de 390 px sem overflow. Conexões reais e dispositivo físico não foram testados. Docker não está instalado no ambiente de desenvolvimento usado nesta entrega: imagens e Compose precisam ser verificados no host antes de publicar.
+Typecheck do backend; 19 testes automatizados do backend de memória, coordenação, cancelamento, gateway, integração Git, schema, locks e adaptadores; 18 scripts de regressão pertinentes; lint e build de produção do frontend. Navegador de produção com runtime simulado: login, senha incorreta recusada, cookie HttpOnly/Strict, mutation de origem externa recusada, logout, conversa, memória, reload e viewport de 390 px sem overflow. 4 testes web cobrem limite por IP, backoff, spoof de XFF e HSTS. Conexões reais e dispositivo físico não foram testados. Docker não está instalado no ambiente de desenvolvimento usado nesta entrega: imagens e Compose precisam ser verificados no host antes de publicar.
 
 ## Etapas que ainda faltam
 
@@ -27,3 +27,7 @@ Typecheck do backend; 9 testes novos de memória, coordenação, cancelamento, g
 7. Evolução da persistência para múltiplos hosts. Locks SQLite/PID e execução em background atuais pressupõem um único host, uma instância do gateway e uma réplica web.
 
 Esta é uma base funcional implementada e revisável. Não representa toda a visão final nem um serviço já publicado. Não foram acessadas contas reais, enviado código à branch principal ou realizado deploy remoto.
+
+## Correções pré-merge — revisão do PR #1
+
+Issue P0 #9 vinculada à #2. Execução indireta em modo restrito bloqueada (Pi checks, imports e filesystem); Chief/planejamento conversationOnly; Codex usa home/workspace temporários, sem configuração herdada e sem shell/exec. PID acompanhado de boot-id/horário/process-start, migração preserva histórico e trata PID repetido. Locks ativos da instância continuam protegidos. Sinais reais SIGTERM/SIGINT interrompem rodadas e fecham o servidor. Login com backoff por IP confiável Traefik. Compose Dokploy sem Caddy, portas publicadas ou rede fixa; healthcheck web e backup VACUUM INTO com restauração testada. Compose validado com o binário oficial standalone. Aguardam revisão e validação no host.
