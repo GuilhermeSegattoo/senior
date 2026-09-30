@@ -23,7 +23,8 @@ export class CodexRuntime implements AgentRuntime {
       cwd: options.cwd,
       model: this.model,
       signal: options.signal,
-      sandbox: options.readOnly
+      conversationOnly: options.conversationOnly,
+      sandbox: (options.conversationOnly || options.readOnly)
         ? "read-only"
         : "workspace-write",
     });

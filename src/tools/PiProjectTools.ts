@@ -1,3 +1,4 @@
+import { codeExecutionAllowed } from "../core/ExecutionPolicy.js";
 import { Type } from "@earendil-works/pi-ai";
 
 import { ListProjectFilesTool } from "./ListProjectFilesTool.js";
@@ -501,7 +502,7 @@ export function createPiProjectTools(
   const readOnlyTools = [
     listTool,
     readTool,
-    checkTool,
+    ...(codeExecutionAllowed() ? [checkTool] : []),
     gitStatusTool,
     gitDiffTool,
     searchTool,

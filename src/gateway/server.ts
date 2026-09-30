@@ -1,3 +1,5 @@
+import { installGracefulShutdown } from "./GracefulShutdown.js";
+import { codeExecutionAllowed } from "../core/ExecutionPolicy.js";
 import { timingSafeEqual } from "node:crypto";
 import { BrainStore } from "../core/BrainStore.js";
 import { Brain, parseSelection } from "../core/Brain.js";
@@ -1145,8 +1147,8 @@ export function createGatewayServer(
             if (!/^[a-zA-Z0-9_-]{1,120}$/.test(value)) throw new HttpError(400, `Identificador inválido: ${name}`);
           }
 
-          if (process.env.NODE_ENV === "production" && process.env.SENIOR_ENABLE_CODE_EXECUTION !== "true" &&
-              (url.pathname.endsWith("/execute") || url.pathname.endsWith("/correct") || (method === "POST" && url.pathname.endsWith("/jobs")))) {
+          if (!codeExecutionAllowed() &&
+              (["/fs/browse", "/projects/import/local", "/projects/import/github"].includes(url.pathname) || url.pathname.endsWith("/execute") || url.pathname.endsWith("/correct") || (method === "POST" && url.pathname.endsWith("/jobs")))) {
             throw new HttpError(403, "Execução de código ainda desabilitada neste servidor. Configure um ambiente de execução isolado antes de habilitar.");
           }
 
@@ -1187,6 +1189,8 @@ export function createGatewayServer(
       }
     }
   );
-  server.on("close", () => { clearInterval(worker); brain.stop(); providerAuthManager.dispose(); void work.finally(() => store.close()); });
+  const stop = () => { clearInterval(worker); brain.stop(); providerAuthManager.dispose(); };
+  installGracefulShutdown(server, stop);
+  server.on("close", () => { stop(); void work.finally(() => store.close()); });
   return server;
 }

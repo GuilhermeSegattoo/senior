@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --import tsx --test src/tests/brain.test.ts src/tests/gateway-brain.test.ts",
+    "test": "node --import tsx --test src/tests/*.test.ts",
     "senior": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
@@ -26,5 +26,8 @@
   },
   "engines": {
     "node": ">=24.0.0 <25"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.1"
   }
 }

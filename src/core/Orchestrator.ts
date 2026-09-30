@@ -1,5 +1,6 @@
 import { parsePlan } from "./PlanSchema.js";
 import { withStateLock } from "./StateLock.js";
+import { conversationWorkspace } from "./ConversationWorkspace.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -134,8 +135,9 @@ Responda como SENIOR.
 
     const result =
       await runtime.ask(prompt, {
-        cwd: process.cwd(),
+        cwd: await conversationWorkspace(),
         readOnly: true,
+        conversationOnly: true,
       });
 
     return result.text;
@@ -337,8 +339,9 @@ Regras:
 
     const chiefResult =
       await runtime.ask(prompt, {
-        cwd: project.path,
+        cwd: await conversationWorkspace(),
         readOnly: true,
+        conversationOnly: true,
       });
 
     const response =

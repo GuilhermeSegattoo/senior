@@ -1,3 +1,4 @@
+import { prepareCodexConversation, codexConversationArgs } from "./CodexConversation.js";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -18,6 +19,7 @@ export interface CodexAskOptions {
   sandbox?: CodexSandbox;
   model?: string;
   signal?: AbortSignal;
+  conversationOnly?: boolean;
 }
 
 function resolveCodexCommand() {
@@ -31,6 +33,7 @@ function resolveCodexCommand() {
 }
 
 export class CodexAdapter {
+  constructor(private readonly resolveCommand = resolveCodexCommand) {}
   private model = process.env.SENIOR_CODEX_MODEL;
   private timeoutMs = 600_000;
 
@@ -41,11 +44,12 @@ export class CodexAdapter {
     const {
       command,
       prefixArgs,
-    } = await resolveCodexCommand();
+    } = await this.resolveCommand();
 
-    return new Promise((resolve, reject) => {
-      const cwd = options.cwd ?? process.cwd();
-      const sandbox = options.sandbox ?? "read-only";
+    const conversation = options.conversationOnly ? await prepareCodexConversation() : undefined;
+    try { return await new Promise<string>((resolve, reject) => {
+      const cwd = conversation?.cwd ?? options.cwd ?? process.cwd();
+      const sandbox = options.conversationOnly ? "read-only" : options.sandbox ?? "read-only";
 
       const args = [
         ...prefixArgs,
@@ -57,6 +61,7 @@ export class CodexAdapter {
         "--cd",
         cwd,
         ...((options.model ?? this.model) ? ["-c", `model=${JSON.stringify(options.model ?? this.model)}`] : []),
+        ...(options.conversationOnly ? codexConversationArgs : []),
         prompt,
       ];
 
@@ -64,6 +69,7 @@ export class CodexAdapter {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
         signal: options.signal,
+        env: conversation?.env,
       });
 
       let finalResponse = "";
@@ -177,14 +183,14 @@ export class CodexAdapter {
 
         resolve(finalResponse.trim());
       });
-    });
+    }); } finally { await conversation?.dispose(); }
   }
 
   async status(): Promise<boolean> {
     const {
       command,
       prefixArgs,
-    } = await resolveCodexCommand();
+    } = await this.resolveCommand();
 
     return new Promise((resolve) => {
       const child = spawn(
@@ -204,7 +210,7 @@ export class CodexAdapter {
     const {
       command,
       prefixArgs,
-    } = await resolveCodexCommand();
+    } = await this.resolveCommand();
 
     return new Promise((resolve) => {
       const child = spawn(

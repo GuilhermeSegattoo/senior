@@ -1,3 +1,4 @@
+import { processIdentity, processOwnerAlive } from "./ProcessIdentity.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { randomUUID } from "node:crypto";
 export interface BrainSession { id: string; title: string; projectId: string | null; createdAt: string; updatedAt: string }
 export interface BrainMessage { id: number; sessionId: string; role: string; text: string; provider: string | null; createdAt: string }
 export interface BrainMemory { id: string; scope: string; text: string; source: string; createdAt: string; updatedAt: string }
-export interface BrainRun { id: string; sessionId: string; requestId: string; status: string; input: string; selection: string; team: string; error: string | null; createdAt: string; completedAt: string | null; pid: number | null }
+export interface BrainRun { id: string; sessionId: string; requestId: string; status: string; input: string; selection: string; team: string; error: string | null; createdAt: string; completedAt: string | null; pid: number | null; bootId: string | null; startedAt: string | null; processStart: string | null }
 
 export class BrainStore {
   readonly db: DatabaseSync;
@@ -22,7 +23,14 @@ export class BrainStore {
       CREATE INDEX IF NOT EXISTS messages_session ON messages(sessionId, id);
       CREATE INDEX IF NOT EXISTS memories_scope ON memories(scope);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_session_run ON brain_runs(sessionId) WHERE status IN ('QUEUED','RUNNING');
-      PRAGMA user_version=1;`);
+      `);
+    this.transaction(() => {
+      const columns = new Set(this.db.prepare("PRAGMA table_info(brain_runs)").all().map(row => String(row.name)));
+      for (const column of ["bootId", "startedAt", "processStart"]) {
+        if (!columns.has(column)) this.db.exec(`ALTER TABLE brain_runs ADD COLUMN ${column} TEXT`);
+      }
+      this.db.exec("PRAGMA user_version=2");
+    });
   }
 
   transaction<T>(fn: () => T): T {
@@ -73,7 +81,7 @@ export class BrainStore {
       const count = this.db.prepare("SELECT COUNT(*) AS count FROM brain_runs WHERE createdAt>=?").get(new Date(Date.now()-3600000).toISOString())!;
       if (Number(count.count) >= Number(process.env.SENIOR_MAX_RUNS_PER_HOUR || 20)) throw new Error("Limite de execuções por hora atingido.");
       const id = randomUUID();
-      this.db.prepare("INSERT INTO brain_runs VALUES (?,?,?,'QUEUED',?,?,?,NULL,?,NULL,NULL)").run(id, sessionId, requestId, input, JSON.stringify(selection), JSON.stringify(team), new Date().toISOString());
+      this.db.prepare("INSERT INTO brain_runs(id,sessionId,requestId,status,input,selection,team,error,createdAt,completedAt,pid) VALUES (?,?,?,'QUEUED',?,?,?,NULL,?,NULL,NULL)").run(id, sessionId, requestId, input, JSON.stringify(selection), JSON.stringify(team), new Date().toISOString());
       this.message(sessionId, "user", input);
       this.event(id, "run.queued", {});
       return this.run(id)!;
@@ -83,7 +91,7 @@ export class BrainStore {
     return this.transaction(() => {
       const next = this.db.prepare("SELECT * FROM brain_runs WHERE status='QUEUED' ORDER BY createdAt LIMIT 1").get() as unknown as BrainRun | undefined;
       if (!next) return;
-      this.db.prepare("UPDATE brain_runs SET status='RUNNING',pid=? WHERE id=?").run(process.pid, next.id);
+      this.db.prepare("UPDATE brain_runs SET status='RUNNING',pid=?,bootId=?,startedAt=?,processStart=? WHERE id=?").run(processIdentity.pid, processIdentity.bootId, processIdentity.startedAt, processIdentity.processStart, next.id);
       this.event(next.id, "run.started", {});
       return this.run(next.id);
     });
@@ -104,9 +112,7 @@ export class BrainStore {
   reconcile() {
     const runs = this.db.prepare("SELECT * FROM brain_runs WHERE status='RUNNING'").all() as unknown as BrainRun[];
     for (const run of runs) {
-      let alive = false;
-      try { if (run.pid) { process.kill(run.pid, 0); alive = true; } } catch { /* Process is gone. */ }
-      if (!alive) this.finish(run.id, "INTERRUPTED", "Servidor reiniciou durante a execução. Revise o histórico antes de enviar novamente.");
+      if (!processOwnerAlive(run)) this.finish(run.id, "INTERRUPTED", "Servidor reiniciou durante a execução. Revise o histórico antes de enviar novamente.");
     }
   }
   event(runId: string, type: string, data: unknown) {
