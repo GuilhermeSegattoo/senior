@@ -1,3 +1,4 @@
+import { ApiRuntime } from "./ApiRuntime.js";
 import { CodexRuntime } from "./CodexRuntime.js";
 import { ClaudeRuntime } from "./ClaudeRuntime.js";
 import { PiRuntime } from "./PiRuntime.js";
@@ -9,7 +10,10 @@ import type {
 export type RuntimeName =
   | "codex"
   | "claude"
-  | "pi";
+  | "pi"
+  | "grok"
+  | "openai"
+  | "anthropic";
 
 export interface CreateRuntimeOptions {
   /*
@@ -22,12 +26,16 @@ export interface CreateRuntimeOptions {
 
 export class RuntimeManager {
   create(
-    runtimeName: RuntimeName = "codex",
+    runtimeName: RuntimeName = this.defaultName(),
     options: CreateRuntimeOptions = {}
   ): AgentRuntime {
     switch (runtimeName) {
+      case "grok":
+      case "openai":
+      case "anthropic":
+        return new ApiRuntime(runtimeName, options.model);
       case "codex":
-        return new CodexRuntime();
+        return new CodexRuntime(undefined, options.model);
 
       case "claude":
         return new ClaudeRuntime({
@@ -42,7 +50,7 @@ export class RuntimeManager {
         const modelName =
           options.model?.trim() ||
           process.env.SENIOR_PI_MODEL?.trim() ||
-          "gpt-6-astra";
+          "";
 
         return new PiRuntime({
           provider,
@@ -61,26 +69,13 @@ export class RuntimeManager {
     }
   }
 
+  defaultName(): RuntimeName {
+    const value = process.env.SENIOR_AGENT_RUNTIME?.trim().toLowerCase() || "codex";
+    if (!["codex", "claude", "pi", "grok", "openai", "anthropic"].includes(value)) throw new Error(`Runtime inválido: ${value}`);
+    return value as RuntimeName;
+  }
+
   fromEnvironment(): AgentRuntime {
-    const configured =
-      process.env.SENIOR_AGENT_RUNTIME
-        ?.trim()
-        .toLowerCase();
-
-    if (!configured) {
-      return this.create("codex");
-    }
-
-    if (
-      configured !== "codex" &&
-      configured !== "claude" &&
-      configured !== "pi"
-    ) {
-      throw new Error(
-        `SENIOR_AGENT_RUNTIME inválido: ${configured}`
-      );
-    }
-
-    return this.create(configured);
+    return this.create(this.defaultName());
   }
 }

@@ -5,12 +5,14 @@ export type JobStatus =
   | "OBJECTIVE_NOT_MET"
   | "FAILED"
   | "NEEDS_HUMAN"
-  | "BLOCKED";
+  | "BLOCKED"
+  | "CANCELLED";
 
 export interface Job {
   id: string;
   projectId: string;
   status: JobStatus;
+  selection?: import("../core/Orchestrator.js").ModelSelection;
 
   createdAt: string;
   startedAt?: string;

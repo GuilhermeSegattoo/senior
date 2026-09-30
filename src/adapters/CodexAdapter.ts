@@ -16,6 +16,8 @@ export type CodexSandbox =
 export interface CodexAskOptions {
   cwd?: string;
   sandbox?: CodexSandbox;
+  model?: string;
+  signal?: AbortSignal;
 }
 
 function resolveCodexCommand() {
@@ -29,7 +31,7 @@ function resolveCodexCommand() {
 }
 
 export class CodexAdapter {
-  private model = "gpt-6-astra";
+  private model = process.env.SENIOR_CODEX_MODEL;
   private timeoutMs = 600_000;
 
   async ask(
@@ -54,14 +56,14 @@ export class CodexAdapter {
         sandbox,
         "--cd",
         cwd,
-        "-c",
-        `model="${this.model}"`,
+        ...((options.model ?? this.model) ? ["-c", `model=${JSON.stringify(options.model ?? this.model)}`] : []),
         prompt,
       ];
 
       const child = spawn(command, args, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
+        signal: options.signal,
       });
 
       let finalResponse = "";

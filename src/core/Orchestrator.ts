@@ -1,3 +1,5 @@
+import { parsePlan } from "./PlanSchema.js";
+import { withStateLock } from "./StateLock.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -124,8 +126,7 @@ Responda como SENIOR.
 
     const runtime =
       this.runtimeManager.create(
-        selection.provider ??
-          "codex",
+        selection.provider ?? this.runtimeManager.defaultName(),
         {
           model: selection.model,
         }
@@ -232,7 +233,7 @@ Responda como SENIOR.
   // PLANEJAMENTO
   // =========================================================
 
-  async createPlan(
+  private async createPlanUnlocked(
     projectId: string,
     objective: string,
     selection: ModelSelection = {}
@@ -253,6 +254,9 @@ Responda como SENIOR.
         `O projeto ${projectId} não está ativo.`
       );
     }
+
+    const existingPlan = await this.taskManager.getPlan(projectId);
+    if (existingPlan) throw new Error("Este projeto já possui plano. Preserve o histórico antes de criar um novo plano.");
 
     const instructions =
       await this.getChiefInstructions();
@@ -315,7 +319,7 @@ Regras:
 - Reviewer deve revisar implementação quando necessário, dependendo (dependsOn) da tarefa que revisa.
 - QA deve validar funcionalidades quando necessário, dependendo (dependsOn) da tarefa que valida.
 - DevOps só deve aparecer quando houver necessidade de infraestrutura/deploy.
-- businessRules, acceptanceCriteria e requiredChecks são OPCIONAIS: inclua-os apenas em tarefas de backend/frontend/devops que produzem código verificável. Arquiteto e Reviewer normalmente não precisam.
+- Tarefas de backend/frontend/devops exigem acceptanceCriteria e Reviewer/QA dependente. requiredChecks deve refletir scripts existentes. Arquiteto e Reviewer normalmente não precisam de checks.
 - acceptanceCriteria deve conter apenas "id" e "description" (o restante é preenchido em runtime).
 - requiredChecks só deve conter checks que o projeto realmente suporta (typecheck, test, lint, build).
 - Todo o plano pertence exclusivamente ao projeto informado.
@@ -325,8 +329,7 @@ Regras:
 
     const runtime =
       this.runtimeManager.create(
-        selection.provider ??
-          "codex",
+        selection.provider ?? this.runtimeManager.defaultName(),
         {
           model: selection.model,
         }
@@ -334,45 +337,14 @@ Regras:
 
     const chiefResult =
       await runtime.ask(prompt, {
-        cwd: process.cwd(),
+        cwd: project.path,
         readOnly: true,
       });
 
     const response =
       chiefResult.text;
 
-    const generated =
-      JSON.parse(response) as Omit<
-        ExecutionPlan,
-        "projectId"
-      >;
-
-    const plan: ExecutionPlan = {
-      projectId,
-      objective:
-        generated.objective,
-      tasks:
-        generated.tasks.map(
-          (task) => ({
-            ...task,
-
-            acceptanceCriteria:
-              task.acceptanceCriteria?.map(
-                (criterion) => ({
-                  id: criterion.id,
-                  description:
-                    criterion.description,
-                  status:
-                    criterion.status ??
-                    "PENDING",
-                  evidence:
-                    criterion.evidence ??
-                    [],
-                })
-              ),
-          })
-        ),
-    };
+    const plan = parsePlan(JSON.parse(response), projectId, objective);
 
     await this.taskManager.savePlan(
       plan
@@ -404,7 +376,7 @@ Regras:
     );
   }
 
-  async completeTask(
+  private async completeTaskUnlocked(
     projectId: string,
     taskId: string
   ) {
@@ -415,7 +387,7 @@ Regras:
     );
   }
 
-  async retryTask(
+  private async retryTaskUnlocked(
     projectId: string,
     taskId: string
   ) {
@@ -429,7 +401,7 @@ Regras:
   // EXECUÇÃO
   // =========================================================
 
-  async executeTask(
+  private async executeTaskUnlocked(
     projectId: string,
     taskId: string,
     selection: ModelSelection = {}
@@ -732,7 +704,7 @@ Regras:
   // CORREÇÃO (Correction Loop)
   // =========================================================
 
-  async correctTask(
+  private async correctTaskUnlocked(
     projectId: string,
     taskId: string,
     selection: ModelSelection = {}
@@ -1398,8 +1370,9 @@ Regras:
   // EXECUÇÃO AUTÔNOMA DO PROJETO
   // =========================================================
 
-  async runProject(
-    projectId: string
+  private async runProjectUnlocked(
+    projectId: string,
+    selection: ModelSelection = {}
   ) {
     const project =
       await this.projectManager.getById(
@@ -1416,6 +1389,12 @@ Regras:
       throw new Error(
         `Projeto ${projectId} não está ativo.`
       );
+    }
+
+    if (selection.provider || selection.model) {
+      const runtime = this.runtimeManager.create(selection.provider, { model: selection.model });
+      this.semanticValidator = new SemanticValidator(runtime);
+      this.planValidator = new PlanValidator(runtime);
     }
 
     const executions: Array<{
@@ -1521,11 +1500,15 @@ Regras:
           "\n[SENIOR] Todas as tarefas concluídas. Validando o objetivo do plano...\n"
         );
 
-        const planValidation =
-          await this.planValidator.validateObjective(
-            plan,
-            project.path
-          );
+        const integration = await this.gitManager.preparePlanIntegration(projectId, project.path,
+          plan.tasks.map(task => task.headCommit || task.commit || ""));
+        const requiredChecks = [...new Set(plan.tasks.flatMap(task => task.requiredChecks || []))];
+        const integrationValidation: TaskValidation = { status: "PENDING", businessRules: [], acceptanceCriteria: [], requiredChecks, attempts: [], maxAttempts: 1 };
+        await this.validationEngine.runChecks(integration.path, integrationValidation);
+        const planValidation = integrationValidation.status === "PASSED"
+          ? await this.planValidator.validateObjective(plan, integration.path)
+          : { status: "FAILED" as const, objective: plan.objective, reasoning: "Checks falharam no código integrado. Consulte integrationChecks.", gateWarnings: [], validatedAt: new Date().toISOString() };
+        planValidation.integration = { workspacePath: integration.path, branch: integration.branch, headCommit: integration.headCommit, checks: integrationValidation.attempts };
 
         await this.taskManager.setPlanValidation(
           projectId,
@@ -1615,11 +1598,13 @@ Regras:
           isCorrection
             ? await this.correctTask(
                 projectId,
-                nextTask.id
+                nextTask.id,
+                selection
               )
             : await this.executeTask(
                 projectId,
-                nextTask.id
+                nextTask.id,
+                selection
               );
 
         const finalStatus =
@@ -1716,4 +1701,28 @@ Regras:
       github,
     };
   }
+  async createPlan(...args: Parameters<Orchestrator["createPlanUnlocked"]>): ReturnType<Orchestrator["createPlanUnlocked"]> {
+    return withStateLock(`operation:${args[0]}`, () => this.createPlanUnlocked(...args));
+  }
+
+  async executeTask(...args: Parameters<Orchestrator["executeTaskUnlocked"]>): ReturnType<Orchestrator["executeTaskUnlocked"]> {
+    return withStateLock(`operation:${args[0]}`, () => this.executeTaskUnlocked(...args));
+  }
+
+  async correctTask(...args: Parameters<Orchestrator["correctTaskUnlocked"]>): ReturnType<Orchestrator["correctTaskUnlocked"]> {
+    return withStateLock(`operation:${args[0]}`, () => this.correctTaskUnlocked(...args));
+  }
+
+  async runProject(...args: Parameters<Orchestrator["runProjectUnlocked"]>): ReturnType<Orchestrator["runProjectUnlocked"]> {
+    return withStateLock(`operation:${args[0]}`, () => this.runProjectUnlocked(...args));
+  }
+
+  async retryTask(...args: Parameters<Orchestrator["retryTaskUnlocked"]>): ReturnType<Orchestrator["retryTaskUnlocked"]> {
+    return withStateLock(`operation:${args[0]}`, () => this.retryTaskUnlocked(...args));
+  }
+
+  async completeTask(...args: Parameters<Orchestrator["completeTaskUnlocked"]>): ReturnType<Orchestrator["completeTaskUnlocked"]> {
+    return withStateLock(`operation:${args[0]}`, () => this.completeTaskUnlocked(...args));
+  }
+
 }

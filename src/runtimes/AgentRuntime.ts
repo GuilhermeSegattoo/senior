@@ -1,6 +1,8 @@
 export interface AgentRuntimeOptions {
   cwd: string;
   readOnly?: boolean;
+  signal?: AbortSignal;
+  conversationOnly?: boolean;
 }
 
 export interface AgentRuntimeResult {

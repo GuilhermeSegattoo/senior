@@ -200,23 +200,17 @@ Regras:
       );
     }
 
-    return parsed.map(
-      (item) => ({
-        id: String(
-          (item as { id: unknown }).id
-        ),
-
-        passed: Boolean(
-          (item as { passed: unknown })
-            .passed
-        ),
-
-        reason: String(
-          (item as { reason?: unknown })
-            .reason ??
-            "Sem justificativa."
-        ),
-      })
-    );
+    const ids = new Set<string>();
+    return parsed.map((item: unknown) => {
+      if (!item || typeof item !== "object") throw new Error("Veredito inválido.");
+      const record = item as Record<string, unknown>;
+      if (typeof record.id !== "string" || !record.id.trim() ||
+          typeof record.passed !== "boolean" || typeof record.reason !== "string" ||
+          !record.reason.trim() || ids.has(record.id)) {
+        throw new Error("Veredito deve conter id único, passed booleano e justificativa.");
+      }
+      ids.add(record.id);
+      return { id: record.id, passed: record.passed, reason: record.reason };
+    });
   }
 }

@@ -1,3 +1,7 @@
+import { existsSync } from "node:fs";
+import { TaskManager } from "./TaskManager.js";
+import { withStateLock } from "./StateLock.js";
+import type { ModelSelection } from "./Orchestrator.js";
 import {
   mkdir,
   open,
@@ -24,32 +28,15 @@ export interface JobRunnerCommand {
   args: (jobId: string) => string[];
 }
 
-/*
- * Invoca "node <tsx/dist/cli.mjs> <script> <jobId>" diretamente, em
- * vez de "npx tsx ...". No Windows, npx é um shim .cmd que
- * spawn()/child_process não resolve sem shell:true — e shell:true
- * traz um risco real de escaping (Node emite DEP0190 por isso).
- * Invocar o .mjs do tsx diretamente com o binário do node é
- * multiplataforma e não precisa de shell.
+/* Usa Node diretamente: JavaScript compilado em produção, tsx via --import em desenvolvimento.
+ * Evita shims .cmd e shell:true, inclusive no Windows.
  */
 const DEFAULT_RUNNER: JobRunnerCommand =
   {
     command: process.execPath,
-    args: (jobId) => [
-      path.join(
-        process.cwd(),
-        "node_modules",
-        "tsx",
-        "dist",
-        "cli.mjs"
-      ),
-      path.join(
-        "src",
-        "jobs",
-        "runJob.ts"
-      ),
-      jobId,
-    ],
+    args: (jobId) => existsSync(path.join(process.cwd(), "dist", "jobs", "runJob.js"))
+      ? [path.join(process.cwd(), "dist", "jobs", "runJob.js"), jobId]
+      : ["--import", "tsx", path.join("src", "jobs", "runJob.ts"), jobId],
   };
 
 /*
@@ -95,9 +82,13 @@ export class JobManager {
     private readonly runner: JobRunnerCommand = DEFAULT_RUNNER
   ) {}
 
-  async start(
-    projectId: string
+  private async startUnlocked(
+    projectId: string,
+    selection: ModelSelection = {}
   ): Promise<Job> {
+    await this.reconcile();
+    const existing = (await this.list(projectId)).find(job => job.status === "RUNNING" || job.status === "PENDING");
+    if (existing) return existing;
     await this.ensureStructure();
 
     const id = randomUUID();
@@ -106,6 +97,7 @@ export class JobManager {
       id,
       projectId,
       status: "PENDING",
+      selection,
       createdAt:
         new Date().toISOString(),
       logFile: path.join(
@@ -152,6 +144,7 @@ export class JobManager {
       }
     );
 
+    if (child.pid) await this.update(job.id, target => { target.pid = child.pid; });
     child.unref();
 
     await logHandle.close();
@@ -318,11 +311,12 @@ export class JobManager {
 
     const stale = jobs.filter(
       (job) =>
-        job.status === "RUNNING" &&
+        (job.status === "RUNNING" || (job.status === "PENDING" && Date.now() - Date.parse(job.createdAt) > 10000)) &&
         !this.isAlive(job.pid)
     );
 
     for (const job of stale) {
+      await new TaskManager().markInterrupted(job.projectId, "Execução interrompida. Revise o worktree antes de tentar novamente.");
       await this.update(
         job.id,
         (target) => {
@@ -358,6 +352,10 @@ export class JobManager {
     jobId: string,
     mutate: (job: Job) => void
   ): Promise<Job> {
+    return withStateLock(`job:${jobId}`, () => this.updateUnlocked(jobId, mutate));
+  }
+
+  private async updateUnlocked(jobId: string, mutate: (job: Job) => void): Promise<Job> {
     const job = await this.get(
       jobId
     );
@@ -368,7 +366,7 @@ export class JobManager {
       );
     }
 
-    mutate(job);
+    if (job.status !== "CANCELLED") mutate(job);
 
     await this.writeJob(job);
 
@@ -378,6 +376,7 @@ export class JobManager {
   private jobFile(
     jobId: string
   ): string {
+    if (!/^[a-zA-Z0-9_-]{1,120}$/.test(jobId)) throw new Error("ID de job inválido.");
     return path.join(
       this.jobsDir,
       `${jobId}.json`
@@ -422,4 +421,21 @@ export class JobManager {
       finalPath
     );
   }
+  async start(projectId: string, selection: ModelSelection = {}): Promise<Job> {
+    return withStateLock(`job-start:${projectId}`, () => this.startUnlocked(projectId, selection));
+  }
+
+  async cancel(jobId: string): Promise<Job> {
+    const job = await this.get(jobId);
+    if (!job) throw new Error("Job não encontrado.");
+    if (!["PENDING", "RUNNING"].includes(job.status)) return job;
+    if (job.pid && this.isAlive(job.pid)) {
+      // Detached process group on POSIX: also stop agent subprocesses.
+      try { process.kill(process.platform === "win32" ? job.pid : -job.pid, "SIGTERM"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+    }
+    await new TaskManager().markInterrupted(job.projectId, "Cancelado pelo usuário. Revise alterações e validações antes de tentar novamente.");
+    return this.update(jobId, target => { target.status = "CANCELLED"; target.completedAt = new Date().toISOString(); target.error = "Cancelado pelo usuário. Revise tarefas interrompidas antes de retomar."; });
+  }
+
 }
