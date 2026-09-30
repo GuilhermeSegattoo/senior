@@ -11,6 +11,7 @@ import { Brain } from "../core/Brain.js";
 import { BrainStore } from "../core/BrainStore.js";
 import { CodexAdapter } from "../adapters/CodexAdapter.js";
 import { CodexRuntime } from "../runtimes/CodexRuntime.js";
+import { codeExecutionAllowed } from "../core/ExecutionPolicy.js";
 import type { AgentRuntimeOptions } from "../runtimes/AgentRuntime.js";
 
 function restore(saved: NodeJS.ProcessEnv) { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; Object.assign(process.env,saved); }
@@ -70,9 +71,24 @@ test("Codex conversation disables execution and inherited config with a clean te
     const runtime=new CodexRuntime(new CodexAdapter(async()=>({command:process.execPath,prefixArgs:[fake]})));
     assert.equal((await runtime.ask("hello",{cwd:directory,conversationOnly:true,readOnly:false})).text,"safe");
     const data=JSON.parse(await readFile(capture,"utf8"));
-    assert.ok(data.args.includes("features.shell_tool=false"));assert.ok(data.args.includes("features.unified_exec=false"));assert.ok(data.args.includes("features.js_repl=false"));assert.ok(data.args.includes("features.hooks=false"));
+    assert.ok(data.args.includes("features.shell_tool=false"));assert.ok(data.args.includes("features.unified_exec=false"));assert.ok(data.args.includes("features.js_repl=false"));assert.ok(data.args.includes("features.hooks=false"));assert.ok(!data.args.some((arg: string)=>arg.includes("codex_hooks")));
     assert.equal(data.args[data.args.indexOf("--sandbox")+1],"read-only");
     assert.notEqual(data.cwd,directory);assert.notEqual(data.home,sourceHome);assert.deepEqual(data.files,["auth.json"]);
     await assert.rejects(access(data.home));
   }finally{restore(saved);await rm(directory,{recursive:true,force:true});}
+});
+
+test("execution policy is closed for unset/test/unknown NODE_ENV and accepts only explicit development or true flag",()=>{
+  const saved={...process.env};
+  try{
+    for(const env of [undefined,"","test","production","Development","staging"]) {
+      if(env===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=env;
+      for(const flag of [undefined,"false","TRUE","1"]){
+        if(flag===undefined)delete process.env.SENIOR_ENABLE_CODE_EXECUTION;else process.env.SENIOR_ENABLE_CODE_EXECUTION=flag;
+        assert.equal(codeExecutionAllowed(),false,`${env}/${flag}`);
+      }
+      process.env.SENIOR_ENABLE_CODE_EXECUTION="true";assert.equal(codeExecutionAllowed(),true);
+    }
+    process.env.NODE_ENV="development";delete process.env.SENIOR_ENABLE_CODE_EXECUTION;assert.equal(codeExecutionAllowed(),true);
+  }finally{restore(saved);}
 });

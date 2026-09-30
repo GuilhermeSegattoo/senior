@@ -23,14 +23,20 @@ export class LoginRateLimit {
   success(ip: string) { this.entries.delete(ip); }
 }
 
-// Only enable behind the private Traefik ingress. Traefik must append RemoteAddr
-// (notAppendXForwardedFor=false) and reject untrusted incoming forwarded headers.
-// Choose the last hop it appended, never a client-controlled leftmost value.
-export function loginClientIp(headers: Headers, trustProxy = process.env.SENIOR_TRUST_PROXY === "true") {
+// Only enable behind private ingress. Count trusted proxies from the right:
+// 1 = Traefik, 2 = Cloudflare + Traefik. Never trust an arbitrary client prefix.
+export function loginClientIp(headers: Headers, trustProxy = process.env.SENIOR_TRUST_PROXY === "true",
+  hops: string | number = process.env.SENIOR_TRUSTED_PROXY_HOPS ?? "1") {
   if (!trustProxy) return "untrusted-ingress";
+  const rawHops = String(hops);
+  if (!/^[1-9]\d?$/.test(rawHops) || Number(rawHops) > 16) return "invalid-ingress";
+  const count = Number(rawHops);
   const forwarded = headers.get("x-forwarded-for") || "";
   if (forwarded.length > 1024) return "invalid-ingress";
-  const ip = forwarded.split(",").at(-1)?.trim() || "";
-  return isIP(ip) ? ip : "invalid-ingress";
+  const chain = forwarded.split(",").map(value => value.trim());
+  if (chain.length < count) return "invalid-ingress";
+  const trustedSuffix = chain.slice(-count);
+  if (trustedSuffix.some(ip => !isIP(ip))) return "invalid-ingress";
+  return trustedSuffix[0];
 }
 export const loginRateLimit = new LoginRateLimit();

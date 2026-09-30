@@ -176,7 +176,8 @@ export class PiRuntime implements AgentRuntime {
 
          customTools: options.conversationOnly ? [] : createPiProjectTools(
              options.cwd,
-	     options.readOnly ?? false
+	     options.readOnly ?? false,
+             options.allowProjectChecks !== false
 	),
 
         thinkingLevel: "off",

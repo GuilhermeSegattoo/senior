@@ -1,3 +1,4 @@
+# Standalone/local Caddy stack only. Dokploy uses compose.dokploy.yaml.
 services:
   api:
     build:
@@ -31,6 +32,9 @@ services:
       SENIOR_WEB_PASSWORD: ${SENIOR_WEB_PASSWORD:?Configure a senha}
       SENIOR_SESSION_SECRET: ${SENIOR_SESSION_SECRET:?Configure o segredo de sessão}
       SENIOR_COOKIE_SECURE: "true"
+      # Caddy is the sole ingress, appending the client IP to XFF.
+      SENIOR_TRUST_PROXY: ${SENIOR_TRUST_PROXY:-true}
+      SENIOR_TRUSTED_PROXY_HOPS: ${SENIOR_TRUSTED_PROXY_HOPS:-1}
     depends_on:
       api:
         condition: service_healthy

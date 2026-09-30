@@ -1,6 +1,6 @@
 # Senior no Dokploy / Traefik — VPS Hetzner
 
-O alvo de publicação é um serviço **Docker Compose no Dokploy**, usando `compose.dokploy.yaml`. Não use `compose.yaml` nesse ambiente: ele inicia Caddy e disputa as portas 80/443 já usadas pelo Traefik. Não houve deploy real ou build Docker neste ambiente de desenvolvimento.
+O alvo de publicação é um serviço **Docker Compose no Dokploy**, usando `compose.dokploy.yaml`. Não use `compose.yaml` nesse ambiente: ele inicia Caddy e disputa as portas 80/443 já usadas pelo Traefik. O CI constrói e verifica as imagens; a publicação na VPS continua sendo uma etapa separada.
 
 ## 1. Preparar serviço e segredos
 
@@ -34,7 +34,7 @@ curl -I https://SEU_DOMINIO/login # deve incluir Strict-Transport-Security
 
 `SENIOR_TRUST_PROXY=true` só é válido porque web não tem porta publicada e recebe tráfego pelo Traefik. Mantenha `forwardedHeaders.insecure=false` e `notAppendXForwardedFor=false` no entryPoint Traefik. Sem CDN/proxy à frente, não habilite confiança global em headers enviados pelo cliente. Se existir CDN, configure `trustedIPs` apenas para seus IPs oficiais e verifique o comportamento real antes de mudar a extração.
 
-O login limita falhas pelo **último IP que Traefik adiciona ao X-Forwarded-For**, ignorando o prefixo controlável pelo cliente. Após cinco falhas começa backoff exponencial de 1s a 60s, com Retry-After, reset em sucesso e expiração após 15 minutos sem falha. IP ausente/inválido entra em um bucket restrito compartilhado; no desenvolvimento sem proxy os headers não são confiados. Com CDN, o último hop pode ser o IP da CDN: não troque para o primeiro IP sem validar a cadeia e implementar seleção dos hops confiáveis.
+O login limita falhas pelo **último IP que Traefik adiciona ao X-Forwarded-For**, ignorando o prefixo controlável pelo cliente. Após cinco falhas começa backoff exponencial de 1s a 60s, com Retry-After, reset em sucesso e expiração após 15 minutos sem falha. IP ausente/inválido entra em um bucket restrito compartilhado; no desenvolvimento sem proxy os headers não são confiados. Configure `SENIOR_TRUSTED_PROXY_HOPS=1` para Traefik direto e `2` para Cloudflare → Traefik. O IP selecionado fica a N posições da direita; prefixos forjados são ignorados. Valores inválidos ou cadeia curta falham fechados. No Traefik, confie somente nas faixas oficiais do Cloudflare e restrinja o acesso direto à origem quando usar dois hops. `SENIOR_TRUST_PROXY` é configurável e pode ser desligado. O `compose.yaml` é destinado ao Caddy local e define a mesma confiança com um hop.
 
 O estado do limite é por processo; esta versão requer uma réplica web. Múltiplas réplicas exigem um armazenamento compartilhado para o limite.
 
@@ -54,11 +54,30 @@ node deploy/backup-sqlite.mjs /app/data/brain.sqlite /app/data/backups/brain-202
 
 O script usa **VACUUM INTO** parametrizado, inclui dados confirmados no WAL, verifica `PRAGMA integrity_check`, aplica permissão 0600 e recusa sobrescrever arquivos. Não precisa parar o Brain para criar esse snapshot. Use nome novo para cada backup; a execução se dá como usuário node, dono de `/app/data`.
 
-Copie o arquivo para armazenamento externo restrito/criptografado. O backup dentro do volume da VPS não protege contra perda da VPS. Não use a cópia bruta do `.sqlite` aberto como backup e não copie o snapshot junto com WAL/SHM da origem.
+### Schedule diário e retenção
 
-Para restaurar, primeiro valide em ambiente separado: pare API, preserve o volume atual, coloque o snapshot no caminho de `SENIOR_BRAIN_DB` (ou `/app/data/brain.sqlite`), mantendo dono node e permissão 0600. Remova apenas os arquivos WAL/SHM antigos **do banco substituído com API parada**, para não reaplicar estado da origem. Inicie uma API e confirme sessões, mensagens e memória.
+Em **Schedules / Jobs** do serviço Compose no Dokploy, escolha o serviço `api`, cron `0 3 * * *` (03:00 UTC; confirme a timezone usada pelo scheduler) e comando:
 
-O snapshot cobre somente o banco escolhido. Projetos/JSON/worktrees e credenciais locais precisam de backup separado, com API e jobs parados para consistência. Não restaure `locks.sqlite` de operações ativas; ele é transitório e deve ser recriado com API/jobs parados. Registre o nome real dos volumes no Dokploy. Ensaie restauração antes de considerar a publicação concluída.
+```sh
+node /app/deploy/backup-sqlite.mjs --daily /app/data/brain.sqlite /app/data/backups
+```
+
+Defina `SENIOR_BACKUP_KEEP=14` na aba Environment, ou passe N como último argumento. N deve estar entre 1 e 3650. O script gera nome UTC datado com UUID, serializa execuções concorrentes e só remove snapshots antigos depois de verificar o novo. Mantém N arquivos próprios, preservando arquivos manuais. Verifique o primeiro job e seu log; API precisa estar em execução para o `docker exec`. Não altere `COMPOSE_PROJECT_NAME` em jobs Compose.
+
+### Volume Backup para S3
+
+Em **Volume Backups**, escolha `api`, volume `senior-data`, destino S3 e prefixo exclusivo da aplicação. Agende após o snapshot (por exemplo `30 3 * * *`, confirmando que o job anterior termina antes). Habilite **Turn off container** para uma cópia consistente do SQLite, JSON e locks; esse backup causa uma breve indisponibilidade da API. Registre o nome real do volume `{appName}_senior-data`. Configure também backup de `senior-projects` se houver projetos persistidos, com API/jobs parados.
+
+Use bucket privado com bloqueio de acesso público e criptografia padrão **SSE-S3 ou SSE-KMS**; credenciais devem acessar apenas o bucket/prefixo necessários. Dokploy não criptografa o arquivo por conta própria. Configure lifecycle/retention no S3, por exemplo 30 dias: isso é independente dos N snapshots locais. Confirme upload, criptografia e restauração; manter backup apenas no volume da VPS não protege contra perda do host.
+
+### Restauração ensaiada
+
+1. Baixe um snapshot ou use **Restore Volume** do Dokploy para restaurar o arquivo S3 em **um volume novo, vazio e sem containers usando-o**, numa aplicação isolada. Preserve o volume original. Não execute `down -v` na produção.
+2. Pare API e jobs do destino. Copie um snapshot verificado para `/app/data/brain.sqlite`, com dono node e permissão 0600. Copie apenas o snapshot: remova somente WAL/SHM antigos desse banco no destino parado, sem trazer WAL/SHM da origem.
+3. Se restaurar o volume completo, preserve projetos/JSON, mas recrie `locks.sqlite` com todos os jobs parados. Confira caminhos e permissões. Inicie uma réplica de API e verifique healthcheck, sessões, mensagens, memória e uma nova gravação.
+4. Após validar no ambiente isolado, repita o procedimento controlado na aplicação alvo. Registre nome do arquivo, horário UTC, commit e resultados.
+
+`src/tests/deploy.test.ts` ensaia snapshot com WAL, integridade, permissões, retenção, falha sem perda de backup e reabertura pelo BrainStore num diretório vazio, incluindo uma gravação após restauração. O restore do S3/Dokploy precisa ser ensaiado na VPS, pois não há credenciais de infraestrutura neste CI.
 
 ## 6. Smoke test e rollback
 
@@ -76,3 +95,6 @@ Antes de atualizar, registre commit/imagens e faça backup. Em rollback, retorne
 - https://docs.dokploy.com/docs/core/docker-compose/domains
 - https://docs.dokploy.com/docs/core/docker-compose/utilities
 - https://doc.traefik.io/traefik/reference/install-configuration/entrypoints/
+
+- https://docs.dokploy.com/docs/core/docker-compose/schedules
+- https://docs.dokploy.com/docs/core/volume-backups

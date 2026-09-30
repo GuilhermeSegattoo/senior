@@ -18,6 +18,7 @@ services:
       SENIOR_ANTHROPIC_MODEL: ${SENIOR_ANTHROPIC_MODEL:-}
       SENIOR_XAI_MODEL: ${SENIOR_XAI_MODEL:-}
       SENIOR_MAX_RUNS_PER_HOUR: ${SENIOR_MAX_RUNS_PER_HOUR:-20}
+      SENIOR_BACKUP_KEEP: ${SENIOR_BACKUP_KEEP:-14}
     expose: ["4000"]
     volumes:
       - senior-data:/app/data
@@ -47,7 +48,8 @@ services:
       SENIOR_WEB_PASSWORD: ${SENIOR_WEB_PASSWORD:?Configure a senha}
       SENIOR_SESSION_SECRET: ${SENIOR_SESSION_SECRET:?Configure o segredo de sessão}
       SENIOR_COOKIE_SECURE: "true"
-      SENIOR_TRUST_PROXY: "true"
+      SENIOR_TRUST_PROXY: ${SENIOR_TRUST_PROXY:-true}
+      SENIOR_TRUSTED_PROXY_HOPS: ${SENIOR_TRUSTED_PROXY_HOPS:-1}
     expose: ["3000"]
     depends_on:
       api:

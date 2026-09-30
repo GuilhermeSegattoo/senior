@@ -13,7 +13,8 @@ import { InspectPackageJsonTool } from "./InspectPackageJsonTool.js";
 
 export function createPiProjectTools(
   workspace: string,
-  readOnly = false
+  readOnly = false,
+  allowChecks = true
 ) {
   const lister =
     new ListProjectFilesTool(workspace);
@@ -502,7 +503,7 @@ export function createPiProjectTools(
   const readOnlyTools = [
     listTool,
     readTool,
-    ...(codeExecutionAllowed() ? [checkTool] : []),
+    ...(allowChecks && codeExecutionAllowed() ? [checkTool] : []),
     gitStatusTool,
     gitDiffTool,
     searchTool,

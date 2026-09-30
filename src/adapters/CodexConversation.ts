@@ -19,5 +19,5 @@ export async function prepareCodexConversation() {
 
 export const codexConversationArgs = [
   "--ephemeral", "-c", 'web_search="disabled"',
-  ...["shell_tool", "unified_exec", "shell_snapshot", "shell_zsh_fork", "apply_patch_freeform", "js_repl", "code_mode", "code_mode_host", "hooks", "codex_hooks", "plugin_hooks", "plugins", "remote_plugin", "apps", "enable_mcp_apps", "multi_agent", "browser_use", "computer_use", "image_generation"].flatMap(feature => ["-c", `features.${feature}=false`]),
+  ...["shell_tool", "unified_exec", "shell_snapshot", "shell_zsh_fork", "apply_patch_freeform", "js_repl", "code_mode", "code_mode_host", "hooks", "plugin_hooks", "plugins", "remote_plugin", "apps", "enable_mcp_apps", "multi_agent", "browser_use", "computer_use", "image_generation"].flatMap(feature => ["-c", `features.${feature}=false`]),
 ];

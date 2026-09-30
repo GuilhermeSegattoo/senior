@@ -45,3 +45,13 @@ test("web adds HSTS to HTTPS responses routed by Traefik", async () => {
   const rules = await nextConfig.headers!();
   assert.ok(rules.some(rule => rule.headers.some(header => header.key === "Strict-Transport-Security" && header.value === "max-age=31536000")));
 });
+
+test("trusted proxy hops select the Cloudflare client from the right and reject malformed/short chains",()=>{
+  const chain=new Headers({"x-forwarded-for":"forged-prefix, 203.0.113.50, 198.51.100.100"});
+  assert.equal(loginClientIp(chain,true,1),"198.51.100.100");
+  assert.equal(loginClientIp(chain,true,2),"203.0.113.50");
+  assert.equal(loginClientIp(new Headers({"x-forwarded-for":"another-spoof, 203.0.113.50, 198.51.100.100"}),true,2),"203.0.113.50");
+  for(const hops of ["0","-1","foo","1.5","17",""])assert.equal(loginClientIp(chain,true,hops),"invalid-ingress");
+  assert.equal(loginClientIp(new Headers({"x-forwarded-for":"203.0.113.50"}),true,2),"invalid-ingress");
+  assert.equal(loginClientIp(new Headers({"x-forwarded-for":"203.0.113.50, bad"}),true,2),"invalid-ingress");
+});

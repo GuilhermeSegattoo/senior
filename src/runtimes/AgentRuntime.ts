@@ -3,6 +3,7 @@ export interface AgentRuntimeOptions {
   readOnly?: boolean;
   signal?: AbortSignal;
   conversationOnly?: boolean;
+  allowProjectChecks?: boolean;
 }
 
 export interface AgentRuntimeResult {

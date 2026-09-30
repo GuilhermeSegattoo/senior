@@ -18,7 +18,8 @@ test("Dokploy compose has private exposes, healthchecks and no fixed networks/na
   }
   for(const volume of Object.values(config.volumes))assert.ok(volume===null||!Object.hasOwn(volume as object,"name"));
   assert.equal(config.services.api.environment.SENIOR_ENABLE_CODE_EXECUTION,"false");
-  assert.equal(config.services.web.environment.SENIOR_TRUST_PROXY,"true");
+  assert.equal(config.services.web.environment.SENIOR_TRUST_PROXY,"${SENIOR_TRUST_PROXY:-true}");
+  assert.equal(config.services.web.environment.SENIOR_TRUSTED_PROXY_HOPS,"${SENIOR_TRUSTED_PROXY_HOPS:-1}");
   assert.equal(config.services.web.environment.OPENAI_API_KEY,undefined);
   assert.equal(config.services.web.environment.SENIOR_API_URL,"http://api:4000");
 });
@@ -35,4 +36,33 @@ test("VACUUM INTO script restores committed WAL history/memory, protects permiss
     assert.throws(()=>execFileSync(process.execPath,["deploy/backup-sqlite.mjs",source,source],{stdio:"pipe"}));
     assert.throws(()=>execFileSync(process.execPath,["deploy/backup-sqlite.mjs",path.join(directory,"missing"),target],{stdio:"pipe"}));
   }finally{store.close();await rm(directory,{recursive:true,force:true});}
+});
+
+test("daily snapshots retain N owned backups, leave unrelated files and preserve backups after failure",async()=>{
+  const directory=await mkdtemp(path.join(os.tmpdir(),"senior-daily-")),source=path.join(directory,"live.sqlite"),backups=path.join(directory,"backups");
+  const store=new BrainStore(source);
+  try{
+    const session=store.createSession("Daily");store.message(session.id,"assistant","Snapshot WAL");
+    const daily=(keep:string,db=source)=>execFileSync(process.execPath,["deploy/backup-sqlite.mjs","--daily",db,backups,keep],{stdio:"pipe"});
+    for(let i=0;i<4;i++)daily("2");
+    const {readdir,writeFile,copyFile,mkdir}=await import("node:fs/promises");
+    await writeFile(path.join(backups,"manual.sqlite"),"preserve");await writeFile(path.join(backups,"notes.txt"),"preserve");
+    const owned=()=>readdir(backups).then(files=>files.filter(file=>/^brain-.*\.sqlite$/.test(file)));
+    assert.equal((await owned()).length,2);
+    const before=await owned();assert.throws(()=>daily("0"));assert.throws(()=>daily("2",path.join(directory,"missing")));assert.deepEqual(await owned(),before);
+    daily("1");assert.equal((await owned()).length,1);assert.equal(await readFile(path.join(backups,"manual.sqlite"),"utf8"),"preserve");
+    store.close();
+    // Restore drill: stopped source, empty replacement directory, standalone
+    // snapshot only (no stale WAL/SHM), same BrainStore migration/startup path.
+    const restoreDir=path.join(directory,"restored");await mkdir(restoreDir);await copyFile(path.join(backups,(await owned())[0]),path.join(restoreDir,"brain.sqlite"));
+    const restored=new BrainStore(path.join(restoreDir,"brain.sqlite"));
+    try{assert.equal(restored.messages(session.id)[0].text,"Snapshot WAL");restored.message(session.id,"assistant","After restore");assert.equal(restored.messages(session.id).length,2);}finally{restored.close();}
+  }finally{try{store.close();}catch{/* Already closed for the restore drill. */}await rm(directory,{recursive:true,force:true});}
+});
+
+test("Docker CI validates compose and builds both targets with fictitious secrets",()=>{
+  const workflow=parse(readFileSync(".github/workflows/ci.yml","utf8")),job=workflow.jobs["docker-images"];
+  const commands=job.steps.map((step:{run?:string})=>step.run||"").join("\n");
+  assert.match(commands,/docker compose -f compose\.dokploy\.yaml config/);assert.match(commands,/docker build --target api/);assert.match(commands,/docker build --target web/);
+  assert.match(job.env.SENIOR_GATEWAY_TOKEN,/^fixture-/);
 });
