@@ -18,6 +18,8 @@ jobs:
       - run: npm run check
       - run: npm ci --ignore-scripts
         working-directory: apps/web
+      - run: npm test
+        working-directory: apps/web
       - run: npm run lint
         working-directory: apps/web
       - run: npm run build
