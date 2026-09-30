@@ -1,5 +1,7 @@
 # Senior — assistente pessoal e de projetos
 
+[Kanban e próximas entregas](docs/KANBAN.md) · [PR de implementação](https://github.com/GuilhermeSegattoo/senior/pull/1)
+
 Senior reúne conversa persistente, memória confirmada pelo usuário, sessões pessoais ou vinculadas a projetos e um coordenador com até dois especialistas. O frontend existente de projetos continua disponível; `/assistant` é o novo centro de conversa, inclusive em telas de celular.
 
 ## Começar localmente
