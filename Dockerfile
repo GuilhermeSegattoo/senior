@@ -1,4 +1,4 @@
-FROM node:24.19.0-bookworm-slim AS backend
+FROM node:26.9.0-bookworm-slim AS backend
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
@@ -7,19 +7,19 @@ COPY src ./src
 COPY agents ./agents
 RUN npm run build
 
-FROM node:24.19.0-bookworm-slim AS api-deps
+FROM node:26.9.0-bookworm-slim AS api-deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
-FROM node:24.19.0-bookworm-slim AS web-build
+FROM node:26.9.0-bookworm-slim AS web-build
 WORKDIR /app/apps/web
 COPY apps/web/package*.json ./
 RUN npm ci --ignore-scripts
 COPY apps/web ./
 RUN npm run build
 
-FROM node:24.19.0-bookworm-slim AS api
+FROM node:26.9.0-bookworm-slim AS api
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=api-deps /app/node_modules ./node_modules
@@ -35,7 +35,7 @@ ENV NODE_ENV=production SENIOR_GATEWAY_HOST=0.0.0.0
 EXPOSE 4000
 CMD ["node", "dist/cli/index.js", "gateway", "start"]
 
-FROM node:24.19.0-bookworm-slim AS web
+FROM node:26.9.0-bookworm-slim AS web
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /app/apps/web
 COPY --from=web-build /app/apps/web/package*.json ./
