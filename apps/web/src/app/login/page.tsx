@@ -13,7 +13,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setPassword(""); router.push("/assistant"); router.refresh();
+      setPassword(""); router.push("/canvas"); router.refresh();
     } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível entrar."); }
     finally { setBusy(false); }
   }

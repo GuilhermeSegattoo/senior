@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   fetchProjects,
   type Project,
@@ -74,6 +75,9 @@ export default function Home() {
             Tudo que o Senior está
             gerenciando.
           </p>
+          <Link href="/canvas" className="mt-2 inline-block font-mono text-[11px] uppercase tracking-wider text-signal">
+            Abrir o quadro
+          </Link>
         </div>
 
         <button

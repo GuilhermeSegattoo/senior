@@ -1,8 +1,21 @@
-import { createHmac, timingSafeEqual, createHash } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const sessionCookie = "senior_session";
-const digest = (text: string) => createHash("sha256").update(text).digest();
-export function equalSecret(a: string, b: string) { return timingSafeEqual(digest(a), digest(b)); }
+// The web password is compared in memory and never stored or hashed.
+// Both sides are padded to the same byte length so timingSafeEqual does not
+// throw or return early on a length mismatch. The length is checked as well,
+// so trailing zero-padding cannot make two different strings match.
+export function equalSecret(left: string, right: string) {
+  const actual = Buffer.from(left);
+  const expected = Buffer.from(right);
+  const length = Math.max(actual.length, expected.length, 1);
+  const actualBytes = Buffer.alloc(length);
+  const expectedBytes = Buffer.alloc(length);
+  actual.copy(actualBytes);
+  expected.copy(expectedBytes);
+  const sameBytes = timingSafeEqual(actualBytes, expectedBytes);
+  return actual.length === expected.length && sameBytes;
+}
 export function configured() {
   return Boolean((process.env.SENIOR_GATEWAY_TOKEN?.length || 0) >= 32 && (process.env.SENIOR_WEB_PASSWORD?.length || 0) >= 16 && (process.env.SENIOR_SESSION_SECRET?.length || 0) >= 32);
 }

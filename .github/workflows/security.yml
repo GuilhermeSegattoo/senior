@@ -41,17 +41,40 @@ jobs:
           cache-dependency-path: ${{ matrix.directory }}/package-lock.json
       - run: npm ci --ignore-scripts
         working-directory: ${{ matrix.directory }}
-      - run: npm audit --audit-level=high
+      - name: Audit high and critical advisories
         working-directory: ${{ matrix.directory }}
+        run: |
+          npm audit --json --audit-level=high > "$RUNNER_TEMP/npm-audit.json" || true
+          node "$GITHUB_WORKSPACE/scripts/audit-gate.mjs" "$RUNNER_TEMP/npm-audit.json"
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/dependency-review-action@v4
+      - id: review
+        continue-on-error: true
+        uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
           comment-summary-in-pr: never
+      - name: Require dependency review only when the graph is enabled
+        env:
+          OUTCOME: ${{ steps.review.outcome }}
+          ENABLED: ${{ vars.DEPENDENCY_REVIEW_ENABLED }}
+        run: |
+          set -eu
+          if [ "$OUTCOME" = "success" ]; then
+            echo "Dependency review passed."
+            exit 0
+          fi
+          if [ "$ENABLED" = "true" ]; then
+            echo "Dependency review failed and DEPENDENCY_REVIEW_ENABLED=true."
+            exit 1
+          fi
+          echo "Dependency review did not pass (outcome=$OUTCOME)."
+          echo "Private repositories without Dependency graph report this action as not supported."
+          echo "npm audit remains a required check. Set the repository variable DEPENDENCY_REVIEW_ENABLED=true after enabling Dependency graph to make this job blocking."
+          exit 0
   secrets:
     runs-on: ubuntu-latest
     steps:

@@ -23,8 +23,15 @@ test('CI matrices cover every check, retain coverage and cancel obsolete PR exec
   }
   const security=parse(readFileSync('.github/workflows/security.yml','utf8'));
   assert.equal(security.jobs.codeql.permissions['security-events'],'write');
-  assert.ok(security.jobs.audit.steps.some((s:{run?:string})=>s.run==='npm audit --audit-level=high'));
+  const auditRun=security.jobs.audit.steps.map((s:{run?:string})=>s.run||'').join('\n');
+  assert.match(auditRun,/npm audit --json --audit-level=high/);
+  assert.match(auditRun,/scripts\/audit-gate\.mjs/);
   assert.equal(security.jobs['dependency-review'].if,"github.event_name == 'pull_request'");
+  const reviewSteps=security.jobs['dependency-review'].steps;
+  const reviewAction=reviewSteps.find((s:{uses?:string})=>s.uses?.startsWith('actions/dependency-review-action'));
+  assert.equal(reviewAction['continue-on-error'],true);
+  assert.match(reviewSteps.map((s:{run?:string})=>s.run||'').join('\n'),/DEPENDENCY_REVIEW_ENABLED/);
+  assert.match(reviewSteps.map((s:{run?:string})=>s.run||'').join('\n'),/npm audit remains a required check/);
   assert.ok(security.jobs.secrets.steps.some((s:{uses?:string})=>s.uses?.startsWith('gitleaks/')));
   const updates=parse(readFileSync('.github/dependabot.yml','utf8')).updates;
   assert.equal(updates.filter((u:{'package-ecosystem':string})=>u['package-ecosystem']==='npm').length,2);

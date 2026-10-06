@@ -14,22 +14,14 @@ Senior reúne conversa persistente, memória confirmada pelo usuário, sessões 
 Use Node 24 e Git. Na raiz:
 
 ```sh
-npm ci
-cp .env.example .env
-npm run gateway
+./start
 ```
 
-Configure em `.env` o runtime, sua chave e um identificador de modelo disponível na sua conta. A implantação inicial usa APIs OpenAI, Anthropic ou xAI. Codex e Claude Code exigem seus respectivos CLIs instalados e autenticados; o Pi exige provedor e modelo configurados. Nenhuma assinatura de aplicativo é tratada como chave de API.
+O script cria `.env` e `apps/web/.env` se faltarem, gera senha, token e segredo com `openssl` quando estão vazios, instala dependências e sobe a API e o site. Ele imprime `http://localhost:3000/canvas` e a senha. O quadro infinito fica em `/canvas`; o assistente clássico continua em `/assistant`.
 
-Em outro terminal:
+O padrão é `SENIOR_AGENT_RUNTIME=pi`: a assinatura do ChatGPT entra pelo Pi (`SENIOR_PI_PROVIDER=openai-codex`), sem `OPENAI_API_KEY`. Preencha `SENIOR_PI_MODEL` com um id da sua conta. Para o Claude Code, use `SENIOR_AGENT_RUNTIME=claude` com o CLI já autenticado, sem `ANTHROPIC_API_KEY`. Cada variável está explicada em [deploy/LOCAL.md](deploy/LOCAL.md). `./start --docker` existe, mas o login dessas assinaturas fica na sua máquina, fora do container.
 
-```sh
-cd apps/web
-npm ci
-npm run dev -- --hostname 127.0.0.1
-```
-
-Abra `http://127.0.0.1:3000/assistant`. O frontend encaminha requisições pelo servidor; chaves de provedores nunca vão ao navegador. O desenvolvimento sem token fica restrito ao acesso local. Se configurar token, configure também senha e segredo de sessão no ambiente do servidor web, conforme `apps/web/.env.example`.
+O caminho manual continua válido: `npm ci`, copiar `.env.example` para `.env`, `npm run gateway` e, em `apps/web`, `npm ci` e `npm run dev -- --hostname 127.0.0.1`.
 
 ## Usar
 
@@ -53,12 +45,12 @@ Os testes novos usam runtimes simulados ou HTTP interceptado. Eles não demonstr
 
 O CI usa a versão exata do `.nvmrc` e a LTS anterior (major menos 2): Node 24.19 e 22. Lint, typecheck, testes backend/web e build são jobs paralelos com cache npm. A cobertura medida por c8 inclui código não executado, aparece no resumo de cada job e em artefatos HTML/LCOV por versão; o badge leva aos relatórios, sem inventar um percentual.
 
-Security roda CodeQL JS/TS, audit (bloqueia high/critical), dependency review em PR e gitleaks no histórico. Docker valida Compose, constrói com Buildx/cache e bloqueia vulnerabilidades HIGH/CRITICAL corrigíveis via Trivy; achados ainda sem correção devem ser acompanhados separadamente. O smoke inicia o Compose real com override de porta apenas no runner, espera ambos healthchecks e valida login e cookie Secure/HttpOnly/SameSite. HTTPS e Traefik reais ainda exigem validação na VPS.
+Security roda CodeQL JS/TS, audit (bloqueia high/critical, com exceção só do advisory de `braces` ainda sem correção publicada e usado pelo ESLint) e gitleaks no histórico. O dependency review em PR só falha o workflow quando a variável de repositório `DEPENDENCY_REVIEW_ENABLED` é `true`. Sem ela, um repositório privado sem Dependency graph não derruba o check; o `npm audit` continua obrigatório. Docker valida Compose, constrói com Buildx/cache e bloqueia vulnerabilidades HIGH/CRITICAL corrigíveis via Trivy; achados ainda sem correção devem ser acompanhados separadamente. O smoke inicia o Compose real com override de porta apenas no runner, espera ambos healthchecks e valida login e cookie Secure/HttpOnly/SameSite. HTTPS e Traefik reais ainda exigem validação na VPS.
 
 Em push para `main`, somente após imagens e smoke aprovados, publica `ghcr.io/guilhermesegattoo/senior/api:<SHA>` e `web:<SHA>`; PRs não publicam. Permissão de escrita em packages existe apenas nesse job, e security-events apenas no CodeQL. Workflows cancelam execuções antigas do mesmo PR. Dependabot cobre os dois projetos npm, Actions e Docker. Dependabot requer configuração no default branch após merge; este PR permanece draft.
 
 Local: `npm run lint`, `npm run check`, `npm run build`, `npm run test:coverage`; no web, `npm run lint`, `npm run typecheck`, `npm run test:coverage` e `npm run build`. O SDK Pi foi atualizado em conjunto para 0.99.2. O lock da aplicação usa brace-expansion 5.0.12 e torna o lock superior autoritativo (`hasShrinkwrap: false` no SDK), pois o shrinkwrap publicado ainda prende 5.0.9 e npm ignora overrides nesse caso. Um teste confere as versões efetivamente instaladas de brace-expansion e undici após `npm ci`; não basta auditar metadados. Revise esse ajuste a cada atualização do SDK ou regeneração do lock.
 
-Dependency review exige **Settings → Security → Dependency graph** habilitado no GitHub. Se estiver desligado, o job falha explicitamente; não é ignorado nem marcado como aprovado.
+Dependency review passa a bloquear o PR só com a variável `DEPENDENCY_REVIEW_ENABLED=true`, depois que o Dependency graph estiver habilitado. Sem essa variável, a mensagem de “not supported” não falha o workflow.
 
 As imagens finais atualizam os pacotes Debian, removem o npm global e a API instala somente dependências de produção. O web inicia Next diretamente via Node. Compilador e tsx ficam no estágio de build/desenvolvimento; execução de engenharia em produção continua desligada.

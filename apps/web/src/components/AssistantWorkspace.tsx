@@ -141,7 +141,7 @@ export function AssistantWorkspace() {
   return <div className="mx-auto flex h-full max-w-[1600px] flex-col p-3 md:p-6">
     <div className="mb-4 flex items-center justify-between gap-3">
       <div><p className="font-mono text-[10px] uppercase tracking-[.22em] text-signal">Uma conversa. Todos os seus projetos.</p><h1 className="mt-1 font-display text-2xl md:text-3xl">Seu Senior</h1></div>
-      <Link href="/settings" className="rounded-lg border border-line px-3 py-2 text-xs text-mute hover:text-paper">Conexões</Link>
+      <div className="flex gap-2"><Link href="/canvas" className="rounded-lg border border-line px-3 py-2 text-xs text-mute hover:text-paper">Quadro</Link><Link href="/settings" className="rounded-lg border border-line px-3 py-2 text-xs text-mute hover:text-paper">Conexões</Link></div>
     </div>
     {error && <div role="alert" className="mb-3 rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{error} {loginNeeded && <Link href="/login" className="underline">Entrar</Link>}</div>}
     {notice && <p className="mb-3 rounded-lg border border-ok/40 p-3 text-sm text-ok">{notice}</p>}

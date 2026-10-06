@@ -8,6 +8,7 @@ import {
 import "./globals.css";
 import { GatewayStatus } from "@/components/GatewayStatus";
 import { ChiefChat } from "@/components/ChiefChat";
+import { AppMain } from "@/components/AppMain";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -65,7 +66,8 @@ export default function RootLayout({
             </div>
 
             <div className="flex items-center gap-3 md:gap-4">
-              <Link href="/assistant" className="font-mono text-[11px] uppercase tracking-wider text-signal">Assistente</Link>
+              <Link href="/canvas" className="font-mono text-[11px] uppercase tracking-wider text-signal">Quadro</Link>
+              <Link href="/assistant" className="font-mono text-[11px] uppercase tracking-wider text-mute hover:text-signal">Assistente</Link>
               <Link href="/login" className="font-mono text-[11px] text-mute">Entrar</Link>
               <Link
                 href="/settings"
@@ -79,9 +81,7 @@ export default function RootLayout({
           </div>
         </header>
 
-        <main className="blueprint-grid min-h-0 flex-1 overflow-y-auto">
-          {children}
-        </main>
+        <AppMain>{children}</AppMain>
 
         <ChiefChat />
       </body>
