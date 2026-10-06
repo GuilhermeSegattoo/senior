@@ -12,10 +12,10 @@
     "test:coverage": "../../node_modules/.bin/c8 --all --include \"src/**/*.ts\" --include \"src/**/*.tsx\" --reporter=text --reporter=json-summary --reporter=lcov --reporter=html npm test"
   },
   "dependencies": {
-    "@xyflow/react": "^12.11.6",
-    "next": "16.3.6",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "@xyflow/react": "^12.12.0",
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "overrides": {
     "sharp": "0.35.5",
@@ -27,7 +27,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
