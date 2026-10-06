@@ -469,6 +469,13 @@ export class GitManager {
     };
   }
 
+  async preparePlanIntegration(projectId: string, projectPath: string, commits: string[]) {
+    const unique = [...new Set(commits.filter(Boolean))];
+    if (!unique.length) throw new Error("Plano não tem commits rastreáveis para validação final.");
+    const workspace = await this.prepareTaskWorkspace(projectId, projectPath, `integration-${Date.now()}`, unique);
+    return { ...workspace, headCommit: await this.getHeadCommit(workspace.path) };
+  }
+
   // =========================================================
   // ALTERAÇÕES
   // =========================================================

@@ -1,4 +1,5 @@
 "use client";
+import { ProjectActivity } from "./ProjectActivity";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -13,6 +14,9 @@ import "@xyflow/react/dist/style.css";
 import {
   createPlan,
   fetchJob,
+  fetchJobs,
+  cancelJobApi,
+  type Provider,
   fetchPlan,
   fetchProject,
   startJob,
@@ -70,6 +74,8 @@ export function ProjectWorkspace({
       "canvas"
     );
 
+  const [provider, setProvider] = useState<Provider | "">("");
+  const [model, setModel] = useState("");
   const [objective, setObjective] =
     useState("");
 
@@ -95,12 +101,13 @@ export function ProjectWorkspace({
   useEffect(() => {
     let cancelled = false;
 
+    fetchJobs(projectId).then(value => { if (!cancelled) setJob(value.jobs[0] || null); }).catch(err => { if (!cancelled) setActionError(err instanceof Error ? err.message : "Falha ao recuperar execuções."); });
     fetchProject(projectId).then(
       (data) => {
         if (!cancelled)
           setProject(data);
       }
-    );
+    ).catch(err => { if (!cancelled) { setActionError(err instanceof Error ? err.message : "Falha ao carregar projeto."); setProject(null); } });
 
     return () => {
       cancelled = true;
@@ -111,9 +118,9 @@ export function ProjectWorkspace({
     let cancelled = false;
 
     async function poll() {
-      const data = await fetchPlan(
-        projectId
-      ).catch(() => null);
+      let data: ManagedPlan | null;
+      try { data = await fetchPlan(projectId); }
+      catch (err) { if (!cancelled) setActionError(err instanceof Error ? err.message : "Falha ao carregar plano."); return; }
 
       if (!cancelled) {
         setPlan(data);
@@ -263,7 +270,8 @@ export function ProjectWorkspace({
       const created =
         await createPlan(
           projectId,
-          trimmed
+          trimmed,
+          { provider: provider || undefined, model: model || undefined }
         );
 
       setPlan(created);
@@ -284,7 +292,8 @@ export function ProjectWorkspace({
 
     try {
       const created = await startJob(
-        projectId
+        projectId,
+        { provider: provider || undefined, model: model || undefined }
       );
 
       setJob(created);
@@ -341,7 +350,7 @@ export function ProjectWorkspace({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-line bg-panel/40 px-6 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line bg-panel/40 px-3 py-3 md:px-6">
         <div>
           <Link
             href="/"
@@ -357,7 +366,7 @@ export function ProjectWorkspace({
 
         {plan &&
           plan !== "loading" && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex gap-1 rounded-md bg-ink p-1">
                 {(
                   [
@@ -408,6 +417,12 @@ export function ProjectWorkspace({
               </button>
             </div>
           )}
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-line bg-panel/50 px-3 py-2">
+        <select aria-label="Motor para plano e execução" value={provider} onChange={e => setProvider(e.target.value as Provider | "")} className="rounded border border-line bg-ink px-2 py-1 text-xs"><option value="">Padrão do servidor</option><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="pi">Pi</option></select>
+        <input aria-label="Modelo para plano e execução" value={model} onChange={e => setModel(e.target.value)} placeholder="Modelo padrão" className="min-w-0 rounded border border-line bg-ink px-2 py-1 text-xs" />
+        {jobBusy && <button onClick={() => { void cancelJobApi(job!.id).then(() => fetchJob(job!.id)).then(setJob).catch(err => setActionError(String(err))); }} className="text-xs text-danger">Cancelar execução</button>}
       </div>
 
       {actionError && (
@@ -516,6 +531,8 @@ export function ProjectWorkspace({
             />
           )}
       </div>
+
+      <ProjectActivity projectId={projectId} />
 
       {selectedTask && (
         <TaskDetailPanel

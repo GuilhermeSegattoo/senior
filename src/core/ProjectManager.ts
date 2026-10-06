@@ -1,8 +1,9 @@
+import { atomicWrite as writeFile } from "./AtomicFile.js";
+import { withStateLock } from "./StateLock.js";
 import {
   mkdir,
   readFile,
   stat,
-  writeFile,
 } from "node:fs/promises";
 
 import path from "node:path";
@@ -134,7 +135,7 @@ export class ProjectManager {
   // CRIAR PROJETO
   // =========================================================
 
-  async create(
+  private async createUnlocked(
     input: CreateProjectInput
   ): Promise<Project> {
     const projects =
@@ -202,7 +203,7 @@ export class ProjectManager {
    * cuida disso na primeira vez que uma tarefa precisar de um
    * worktree (mesmo comportamento de sempre, preguiçoso).
    */
-  async importLocal(input: {
+  private async importLocalUnlocked(input: {
     path: string;
     name?: string;
   }): Promise<Project> {
@@ -283,7 +284,7 @@ export class ProjectManager {
   // IMPORTAR DO GITHUB
   // =========================================================
 
-  async importGithub(input: {
+  private async importGithubUnlocked(input: {
     url: string;
     name?: string;
   }): Promise<Project> {
@@ -381,7 +382,7 @@ export class ProjectManager {
   // ASSOCIAR REPOSITÓRIO
   // =========================================================
 
-  async attachRepository(
+  private async attachRepositoryUnlocked(
     projectId: string,
     repository: Project["repository"]
   ): Promise<Project> {
@@ -418,4 +419,20 @@ export class ProjectManager {
 
     return project;
   }
+  async create(...args: Parameters<ProjectManager["createUnlocked"]>): ReturnType<ProjectManager["createUnlocked"]> {
+    return withStateLock("projects", () => this.createUnlocked(...args));
+  }
+
+  async importLocal(...args: Parameters<ProjectManager["importLocalUnlocked"]>): ReturnType<ProjectManager["importLocalUnlocked"]> {
+    return withStateLock("projects", () => this.importLocalUnlocked(...args));
+  }
+
+  async importGithub(...args: Parameters<ProjectManager["importGithubUnlocked"]>): ReturnType<ProjectManager["importGithubUnlocked"]> {
+    return withStateLock("projects", () => this.importGithubUnlocked(...args));
+  }
+
+  async attachRepository(...args: Parameters<ProjectManager["attachRepositoryUnlocked"]>): ReturnType<ProjectManager["attachRepositoryUnlocked"]> {
+    return withStateLock("projects", () => this.attachRepositoryUnlocked(...args));
+  }
+
 }

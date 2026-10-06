@@ -51,7 +51,8 @@ async function main() {
 
     const result =
       await orchestrator.runProject(
-        job.projectId
+        job.projectId,
+        job.selection
       );
 
     await jobManager.markCompleted(

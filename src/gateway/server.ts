@@ -1,3 +1,9 @@
+import { installGracefulShutdown } from "./GracefulShutdown.js";
+import { codeExecutionAllowed } from "../core/ExecutionPolicy.js";
+import { timingSafeEqual } from "node:crypto";
+import { BrainStore } from "../core/BrainStore.js";
+import { Brain, parseSelection } from "../core/Brain.js";
+import { RuntimeManager } from "../runtimes/RuntimeManager.js";
 import {
   createServer,
   IncomingMessage,
@@ -48,6 +54,7 @@ import type {
 
 export interface GatewayDependencies {
   orchestrator?: Orchestrator;
+  brain?: Brain;
   jobManager?: JobManager;
   eventBus?: EventBus;
   projectMemory?: ProjectMemory;
@@ -125,8 +132,11 @@ async function readJsonBody(
   req: IncomingMessage
 ): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let bytes = 0;
 
   for await (const chunk of req) {
+    bytes += Buffer.byteLength(chunk);
+    if (bytes > 256 * 1024) throw new HttpError(413, "Corpo excede 256 KiB.");
     chunks.push(chunk as Buffer);
   }
 
@@ -158,7 +168,21 @@ async function readJsonBody(
     return {};
   }
 
-  return JSON.parse(raw);
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
+    const body = value as Record<string, unknown>;
+    for (const field of ["message", "objective", "name", "path", "url", "title", "text", "scope", "requestId", "projectId"]) {
+      if (body[field] !== undefined && (typeof body[field] !== "string" || !(body[field] as string).trim() || (body[field] as string).length > 20000)) throw new HttpError(400, `Campo inválido: ${field}`);
+    }
+    if (body.provider !== undefined || body.model !== undefined) {
+      try { parseSelection({provider: body.provider, model: body.model}); } catch { throw new HttpError(400, "Provedor/modelo inválido."); }
+    }
+    return body;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(400, "JSON inválido.");
+  }
 }
 
 function sendJson(
@@ -240,6 +264,12 @@ export function createGatewayServer(
     deps.providerAuthManager ??
     new ProviderAuthManager();
 
+  const store = deps.brain?.store ?? new BrainStore();
+  const brain = deps.brain ?? new Brain(store, orchestrator);
+  let work: Promise<void> = Promise.resolve();
+  const worker = setInterval(() => { work = brain.tick().catch(() => undefined); }, 200);
+  worker.unref();
+
   const routes: Route[] = [];
 
   function route(
@@ -257,6 +287,78 @@ export function createGatewayServer(
       handler,
     });
   }
+
+  route("GET", "/brain/sessions", async (_req, res) => sendJson(res, 200, { sessions: store.sessions() }));
+  route("POST", "/brain/sessions", async (req, res) => {
+    const body = await readJsonBody(req) as { title?: string; projectId?: string };
+    if (body.projectId && !(await orchestrator.getProject(body.projectId))) throw new HttpError(404, "Projeto não encontrado.");
+    sendJson(res, 201, { session: store.createSession(body.title || "Nova conversa", body.projectId) });
+  });
+  route("GET", "/brain/sessions/:sessionId", async (_req, res, params) => {
+    const session = store.session(params.sessionId);
+    if (!session) throw new HttpError(404, "Sessão não encontrada.");
+    sendJson(res, 200, { session, messages: store.messages(session.id), runs: store.runs(session.id) });
+  });
+  route("POST", "/brain/sessions/:sessionId/messages", async (req, res, params) => {
+    if (!store.session(params.sessionId)) throw new HttpError(404, "Sessão não encontrada.");
+    const body = await readJsonBody(req) as { message?: string; requestId?: string; selection?: unknown; team?: unknown };
+    if (!body.message || !body.requestId || !/^[a-zA-Z0-9_-]{1,100}$/.test(body.requestId)) throw new HttpError(400, "Informe message e requestId válido.");
+    try {
+      const selection = parseSelection(body.selection || {});
+      const team = body.team === undefined ? [] : body.team;
+      if (!Array.isArray(team) || team.length > 2) throw new HttpError(400, "Equipe aceita no máximo dois especialistas.");
+      const run = store.enqueue(params.sessionId, body.requestId, body.message, selection, team.map(parseSelection));
+      sendJson(res, 202, { run });
+    } catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(409, error instanceof Error ? error.message : "Execução não criada."); }
+  });
+  route("GET", "/brain/runs/:runId/stream", async (req, res, params, query) => {
+    if (!store.run(params.runId)) throw new HttpError(404, "Execução não encontrada.");
+    let cursor = Number(req.headers["last-event-id"] || query.get("after")) || 0;
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
+    const flush = () => {
+      for (const event of store.events(params.runId, cursor)) {
+        cursor = Number(event.id);
+        res.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+      const run = store.run(params.runId);
+      if (run && !["QUEUED", "RUNNING"].includes(run.status)) { clearInterval(timer); res.end(); }
+      else res.write(": heartbeat\n\n");
+    };
+    const timer = setInterval(flush, 1000);
+    timer.unref();
+    res.on("close", () => clearInterval(timer));
+    flush();
+  });
+  route("POST", "/brain/runs/:runId/cancel", async (_req, res, params) => {
+    if (!store.run(params.runId)) throw new HttpError(404, "Execução não encontrada.");
+    brain.cancel(params.runId); sendJson(res, 200, { run: store.run(params.runId) });
+  });
+  route("GET", "/brain/runs/:runId/events", async (_req, res, params, query) => {
+    if (!store.run(params.runId)) throw new HttpError(404, "Execução não encontrada.");
+    sendJson(res, 200, { events: store.events(params.runId, Number(query.get("after")) || 0) });
+  });
+  route("GET", "/brain/memory", async (_req, res, _params, query) => {
+    sendJson(res, 200, { memories: store.memories(query.get("scope") || "personal", query.get("q") || "") });
+  });
+  route("POST", "/brain/memory", async (req, res) => {
+    const body = await readJsonBody(req) as { text?: string; scope?: string; id?: string };
+    if (!body.text || body.text.length > 4000) throw new HttpError(400, "Memória deve conter de 1 a 4000 caracteres.");
+    const scope = body.scope || "personal";
+    if (scope !== "personal" && !(await orchestrator.getProject(scope))) throw new HttpError(404, "Escopo de projeto inválido.");
+    sendJson(res, 201, { memory: store.remember(scope, body.text, "user-confirmed", body.id) });
+  });
+  route("POST", "/brain/memory/:memoryId/forget", async (req, res, params) => {
+    const body = await readJsonBody(req) as { scope?: string };
+    sendJson(res, 200, { deleted: store.forget(body.scope || "personal", params.memoryId) });
+  });
+  route("GET", "/providers/capabilities", async (_req, res) => {
+    const manager = new RuntimeManager();
+    const apis = await Promise.all((["openai", "anthropic", "grok"] as const).map(async name => ({ name, configured: await manager.create(name).status(), mode: "api", coding: false })));
+    sendJson(res, 200, { defaultRuntime: manager.defaultName(), providers: [
+      { name: "codex", mode: "cli", coding: true }, { name: "claude", mode: "cli", coding: true },
+      { name: "pi", mode: "runtime", coding: true, configured: await manager.create("pi").status() }, ...apis
+    ] });
+  });
 
   // =========================================================
   // HEALTH
@@ -607,6 +709,10 @@ export function createGatewayServer(
     }
   );
 
+  route("POST", "/projects/:id/tasks/:taskId/retry", async (_req, res, params) => {
+    sendJson(res, 200, { plan: await orchestrator.retryTask(params.id, params.taskId) });
+  });
+
   // =========================================================
   // JOBS
   // =========================================================
@@ -614,10 +720,14 @@ export function createGatewayServer(
   route(
     "POST",
     "/projects/:id/jobs",
-    async (_req, res, params) => {
+    async (req, res, params) => {
+      if (!(await orchestrator.getProject(params.id))) throw new HttpError(404, "Projeto não encontrado.");
+      if (!(await orchestrator.getTasks(params.id))) throw new HttpError(409, "Crie e revise um plano antes de executar.");
+      const selection = parseSelection(await readJsonBody(req));
+      if (["grok", "openai", "anthropic"].includes(selection.provider || new RuntimeManager().defaultName())) throw new HttpError(400, "Execução de código exige Pi, Codex ou Claude Code.");
       const job =
         await jobManager.start(
-          params.id
+          params.id, selection
         );
 
       sendJson(res, 202, {
@@ -675,6 +785,11 @@ export function createGatewayServer(
       });
     }
   );
+
+  route("POST", "/jobs/:jobId/cancel", async (_req, res, params) => {
+    if (!(await jobManager.get(params.jobId))) throw new HttpError(404, "Job não encontrado.");
+    sendJson(res, 200, { job: await jobManager.cancel(params.jobId) });
+  });
 
   route(
     "GET",
@@ -901,6 +1016,11 @@ export function createGatewayServer(
     }
   );
 
+  route("POST", "/providers/:provider/login/cancel", async (_req, res, params) => {
+    if (!isKnownProvider(params.provider)) throw new HttpError(400, "Provedor desconhecido.");
+    sendJson(res, 200, { session: providerAuthManager.cancelLogin(params.provider) });
+  });
+
   route(
     "GET",
     "/providers/:provider/login",
@@ -937,7 +1057,7 @@ export function createGatewayServer(
     }
   );
 
-  return createServer(
+  const server = createServer(
     async (req, res) => {
       const allowedOrigin =
         resolveAllowedOrigin(req);
@@ -965,7 +1085,7 @@ export function createGatewayServer(
                   "Access-Control-Allow-Methods":
                     "GET,POST,OPTIONS",
                   "Access-Control-Allow-Headers":
-                    "Content-Type",
+                    "Content-Type, Authorization",
                 }
               : {}
           );
@@ -981,6 +1101,18 @@ export function createGatewayServer(
 
         const method =
           req.method ?? "GET";
+        const token = process.env.SENIOR_GATEWAY_TOKEN;
+        if (url.pathname !== "/health") {
+          if (token) {
+            const supplied = req.headers.authorization || "";
+            const expected = `Bearer ${token}`;
+            if (Buffer.byteLength(supplied) !== Buffer.byteLength(expected) || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) throw new HttpError(401, "Autenticação necessária.");
+          } else {
+            const remote = req.socket.remoteAddress;
+            if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote || "")) throw new HttpError(403, "Configure autenticação para acesso remoto.");
+          }
+        }
+
 
         for (const candidate of routes) {
           if (
@@ -1007,13 +1139,18 @@ export function createGatewayServer(
           candidate.paramNames.forEach(
             (name, index) => {
               params[name] =
-                decodeURIComponent(
-                  match[
-                    index + 1
-                  ]
-                );
+                decodeURIComponent(match[index + 1]);
             }
           );
+
+          for (const [name, value] of Object.entries(params)) {
+            if (!/^[a-zA-Z0-9_-]{1,120}$/.test(value)) throw new HttpError(400, `Identificador inválido: ${name}`);
+          }
+
+          if (!codeExecutionAllowed() &&
+              (["/fs/browse", "/projects/import/local", "/projects/import/github"].includes(url.pathname) || url.pathname.endsWith("/execute") || url.pathname.endsWith("/correct") || (method === "POST" && url.pathname.endsWith("/jobs")))) {
+            throw new HttpError(403, "Execução de código ainda desabilitada neste servidor. Configure um ambiente de execução isolado antes de habilitar.");
+          }
 
           await candidate.handler(
             req,
@@ -1052,4 +1189,8 @@ export function createGatewayServer(
       }
     }
   );
+  const stop = () => { clearInterval(worker); brain.stop(); providerAuthManager.dispose(); };
+  installGracefulShutdown(server, stop);
+  server.on("close", () => { stop(); void work.finally(() => store.close()); });
+  return server;
 }

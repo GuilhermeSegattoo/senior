@@ -6,13 +6,20 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:coverage": "../../node_modules/.bin/c8 --all --include \"src/**/*.ts\" --include \"src/**/*.tsx\" --reporter=text --reporter=json-summary --reporter=lcov --reporter=html npm test"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.6",
     "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8"
+  },
+  "overrides": {
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

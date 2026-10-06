@@ -18,7 +18,7 @@ export interface Project {
 export function getApiUrl(): string {
   return (
     process.env.NEXT_PUBLIC_API_URL ??
-    "http://localhost:4000"
+    "/api/gateway"
   );
 }
 
@@ -212,6 +212,8 @@ export interface ManagedTask {
   branch?: string;
   commit?: string;
   headCommit?: string;
+  acceptanceCriteria?: Array<{ id: string; description: string }>;
+  validation?: { status: string; blockedReason?: string; attempts: Array<{ attempt: number; diagnosis?: string; checks: Array<{ check: string; status: string; failureReason?: string; evidence?: { output?: string } }>; criteria: Array<{ id: string; description: string; status: string; failureReason?: string; evidence?: Array<{ description: string }> }> }> };
 }
 
 export interface ManagedPlan {
@@ -247,7 +249,10 @@ export async function fetchPlan(
 export type Provider =
   | "codex"
   | "claude"
-  | "pi";
+  | "pi"
+  | "grok"
+  | "openai"
+  | "anthropic";
 
 export interface ModelSelection {
   provider?: Provider;
@@ -341,7 +346,8 @@ export type JobStatus =
   | "OBJECTIVE_NOT_MET"
   | "FAILED"
   | "NEEDS_HUMAN"
-  | "BLOCKED";
+  | "BLOCKED"
+  | "CANCELLED";
 
 export interface Job {
   id: string;
@@ -354,13 +360,14 @@ export interface Job {
 }
 
 export async function startJob(
-  projectId: string
+  projectId: string,
+  selection: ModelSelection = {}
 ): Promise<Job> {
   const data = await request<{
     job: Job;
   }>(
     `/projects/${projectId}/jobs`,
-    { method: "POST" }
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(selection) }
   );
 
   return data.job;
@@ -392,7 +399,9 @@ export type LoginSessionStatus =
   | "pending_url"
   | "pending_completion"
   | "success"
-  | "failed";
+  | "failed"
+  | "cancelled"
+  | "expired";
 
 export interface LoginSession {
   status: LoginSessionStatus;
@@ -469,3 +478,25 @@ export async function askChief(
 
   return data.response;
 }
+
+export interface BrainSession { id: string; title: string; projectId: string | null; updatedAt: string }
+export interface BrainMessage { id: number; role: string; text: string; provider: string | null }
+export interface BrainRun { id: string; status: string; error: string | null }
+export interface BrainMemory { id: string; text: string; source: string; scope: string; updatedAt: string }
+export interface BrainSessionDetail { session: BrainSession; messages: BrainMessage[]; runs: BrainRun[] }
+export const fetchBrainSessions = () => request<{ sessions: BrainSession[] }>("/brain/sessions");
+export const fetchBrainSession = (id: string) => request<BrainSessionDetail>(`/brain/sessions/${id}`);
+export const createBrainSession = (title: string, projectId?: string) => request<{ session: BrainSession }>("/brain/sessions", jsonPost({ title, projectId }));
+export const sendBrainMessage = (id: string, message: string, requestId: string, selection: ModelSelection, team: ModelSelection[]) => request<{ run: BrainRun }>(`/brain/sessions/${id}/messages`, jsonPost({ message, requestId, selection, team }));
+export const cancelBrainRun = (id: string) => request(`/brain/runs/${id}/cancel`, jsonPost({}));
+export const fetchBrainMemory = (scope: string) => request<{ memories: BrainMemory[] }>(`/brain/memory?scope=${encodeURIComponent(scope)}`);
+export const saveBrainMemory = (text: string, scope: string, id?: string) => request("/brain/memory", jsonPost({ text, scope, id }));
+export const forgetBrainMemory = (id: string, scope: string) => request(`/brain/memory/${id}/forget`, jsonPost({ scope }));
+export const cancelProviderLogin = (provider: AuthProviderName) => request(`/providers/${provider}/login/cancel`, jsonPost({}));
+export const fetchProjectEvents = (id: string) => request<{ events: Array<{ id: string; type: string; createdAt: string; taskId?: string; data: Record<string, unknown> }> }>(`/projects/${id}/events?limit=50`);
+export const fetchJobs = (projectId?: string) => request<{ jobs: Job[] }>(`/jobs${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`);
+function jsonPost(value: unknown): RequestInit { return { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) }; }
+
+export const retryTaskApi = (projectId: string, taskId: string) => request(`/projects/${projectId}/tasks/${taskId}/retry`, jsonPost({}));
+export const cancelJobApi = (id: string) => request(`/jobs/${id}/cancel`, jsonPost({}));
+export const fetchCapabilities = () => request<{ defaultRuntime: Provider; providers: Array<{ name: string; configured?: boolean; mode: string; coding: boolean }> }>("/providers/capabilities");

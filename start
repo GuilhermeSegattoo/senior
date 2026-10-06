@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Sobe o Senior neste computador: gera .env, instala dependências e inicia API + site.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+usage() {
+  cat <<'EOF'
+Uso: ./start [--docker]
+
+  ./start          instala o que faltar, gera .env e sobe API + site (npm)
+  ./start --docker sobe o Compose. Exige SENIOR_DOMAIN e não usa o login local do Pi/Claude.
+
+A senha e o endereço aparecem no final. Ctrl+C encerra os processos do modo npm.
+EOF
+}
+
+mode="npm"
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+if [[ "${1:-}" == "--docker" ]]; then
+  mode="docker"
+  shift
+fi
+if [[ $# -gt 0 ]]; then
+  echo "Argumento desconhecido: $1" >&2
+  usage >&2
+  exit 1
+fi
+
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Instale Node.js 24 (veja .nvmrc) e o npm." >&2
+  exit 1
+fi
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "Instale o openssl. O ./start usa openssl rand para gerar os segredos." >&2
+  exit 1
+fi
+
+port_open() {
+  node -e 'fetch(process.argv[1]).then(()=>process.exit(0)).catch(()=>process.exit(1))' "$1"
+}
+
+if port_open "http://127.0.0.1:4000/health" && port_open "http://127.0.0.1:3000/canvas"; then
+  if [[ -f .env && -f apps/web/.env ]]; then
+    echo "O Senior já está rodando."
+    node scripts/prepare-env.mjs
+    exit 0
+  fi
+  echo "As portas 3000 e 4000 já estão em uso, mas falta .env. Pare o processo antigo e rode ./start de novo." >&2
+  exit 1
+fi
+
+node scripts/prepare-env.mjs --quiet
+
+env_value() {
+  local key="$1" file="$2" line
+  line="$(grep -E "^${key}=" "$file" | tail -n 1 || true)"
+  printf "%s" "${line#"${key}"=}"
+}
+
+install_if_needed() {
+  local dir="$1"
+  if [[ ! -d "$dir/node_modules" || "$dir/package-lock.json" -nt "$dir/node_modules" ]]; then
+    echo "Instalando dependências em ${dir}"
+    if [[ "$dir" == "." ]]; then
+      npm ci
+    else
+      (cd "$dir" && npm ci)
+    fi
+  else
+    echo "Dependências já instaladas em ${dir}"
+  fi
+}
+
+if [[ "$mode" == "docker" ]]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker não encontrado. Use ./start sem --docker para o Pi ou o Claude nesta máquina." >&2
+    exit 1
+  fi
+  domain="$(env_value SENIOR_DOMAIN .env)"
+  if [[ -z "$domain" ]]; then
+    echo "Defina SENIOR_DOMAIN no .env antes de ./start --docker. O Caddy precisa do hostname." >&2
+    exit 1
+  fi
+  echo "Subindo o Compose para ${domain}."
+  echo "O login do Pi e do Claude fica nesta máquina e não entra no container. Para a assinatura, use ./start sem --docker."
+  echo "Senha: $(env_value SENIOR_WEB_PASSWORD .env)"
+  exec docker compose up --build
+fi
+
+install_if_needed "."
+install_if_needed "apps/web"
+
+if port_open "http://127.0.0.1:4000/health" || port_open "http://127.0.0.1:3000/canvas"; then
+  echo "A porta 3000 ou 4000 já está em uso. Pare o processo antigo antes de subir de novo." >&2
+  exit 1
+fi
+
+mkdir -p tmp/start
+set -m
+gateway_pid=""
+web_pid=""
+cleanup() {
+  if [[ -n "${gateway_pid}" ]]; then
+    kill -- "-${gateway_pid}" 2>/dev/null || kill "${gateway_pid}" 2>/dev/null || true
+  fi
+  if [[ -n "${web_pid}" ]]; then
+    kill -- "-${web_pid}" 2>/dev/null || kill "${web_pid}" 2>/dev/null || true
+  fi
+  wait "${gateway_pid}" 2>/dev/null || true
+  wait "${web_pid}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+npm run gateway > tmp/start/gateway.log 2>&1 &
+gateway_pid=$!
+(cd apps/web && npm run dev -- --hostname 127.0.0.1 --port 3000) > tmp/start/web.log 2>&1 &
+web_pid=$!
+
+wait_http() {
+  local url="$1" label="$2" i=0
+  while [[ "$i" -lt 120 ]]; do
+    i=$((i + 1))
+    if port_open "$url"; then
+      return 0
+    fi
+    if ! kill -0 "$gateway_pid" 2>/dev/null || ! kill -0 "$web_pid" 2>/dev/null; then
+      echo "O processo de ${label} encerrou. Veja tmp/start/gateway.log e tmp/start/web.log." >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "Tempo esgotado esperando ${label} em ${url}. Veja tmp/start/gateway.log e tmp/start/web.log." >&2
+  return 1
+}
+
+wait_http "http://127.0.0.1:4000/health" "API"
+wait_http "http://127.0.0.1:3000/canvas" "site"
+node scripts/prepare-env.mjs
+
+while kill -0 "$gateway_pid" 2>/dev/null && kill -0 "$web_pid" 2>/dev/null; do
+  sleep 2
+done
+echo "Um dos processos encerrou. Veja tmp/start/gateway.log e tmp/start/web.log." >&2
+exit 1

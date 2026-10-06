@@ -1,0 +1,94 @@
+name: Security
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: ['.', 'apps/web']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: ${{ matrix.directory }}
+      - name: Audit high and critical advisories
+        working-directory: ${{ matrix.directory }}
+        run: |
+          npm audit --json --audit-level=high > "$RUNNER_TEMP/npm-audit.json" || true
+          node "$GITHUB_WORKSPACE/scripts/audit-gate.mjs" "$RUNNER_TEMP/npm-audit.json"
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: review
+        continue-on-error: true
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+      - name: Require dependency review only when the graph is enabled
+        env:
+          OUTCOME: ${{ steps.review.outcome }}
+          ENABLED: ${{ vars.DEPENDENCY_REVIEW_ENABLED }}
+        run: |
+          set -eu
+          if [ "$OUTCOME" = "success" ]; then
+            echo "Dependency review passed."
+            exit 0
+          fi
+          if [ "$ENABLED" = "true" ]; then
+            echo "Dependency review failed and DEPENDENCY_REVIEW_ENABLED=true."
+            exit 1
+          fi
+          echo "Dependency review did not pass (outcome=$OUTCOME)."
+          echo "Private repositories without Dependency graph report this action as not supported."
+          echo "npm audit remains a required check. Set the repository variable DEPENDENCY_REVIEW_ENABLED=true after enabling Dependency graph to make this job blocking."
+          exit 0
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-report
+          path: results.sarif
+          if-no-files-found: warn
+          retention-days: 7

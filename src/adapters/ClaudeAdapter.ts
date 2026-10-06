@@ -29,6 +29,8 @@ export interface ClaudeAskOptions {
   cwd?: string;
   sandbox?: ClaudeSandbox;
   model?: string;
+  signal?: AbortSignal;
+  conversationOnly?: boolean;
 }
 
 interface ClaudeResultPayload {
@@ -53,7 +55,7 @@ function resolveClaudeCommand() {
 
 export class ClaudeAdapter {
   private defaultModel =
-    "claude-sonnet-5";
+    process.env.SENIOR_CLAUDE_MODEL || "sonnet";
 
   private timeoutMs = 600_000;
 
@@ -107,6 +109,7 @@ export class ClaudeAdapter {
 
         const args = [
           ...prefixArgs,
+          ...(options.conversationOnly ? ["--tools", ""] : []),
           "-p",
           prompt,
           "--output-format",
@@ -126,6 +129,7 @@ export class ClaudeAdapter {
           args,
           {
             cwd,
+            signal: options.signal,
             stdio: [
               "ignore",
               "pipe",

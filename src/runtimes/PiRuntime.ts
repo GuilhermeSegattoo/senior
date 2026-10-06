@@ -99,7 +99,11 @@ export class PiRuntime implements AgentRuntime {
       },
     });
 
-    await agent.prompt(prompt);
+    options.signal?.throwIfAborted();
+    const abort = () => agent.abort();
+    options.signal?.addEventListener("abort", abort, { once: true });
+    try { await agent.prompt(prompt); options.signal?.throwIfAborted(); }
+    finally { options.signal?.removeEventListener("abort", abort); }
 
     const text =
       this.extractAgentText(
@@ -170,9 +174,10 @@ export class PiRuntime implements AgentRuntime {
 
         noTools: "builtin",
 
-         customTools: createPiProjectTools(
+         customTools: options.conversationOnly ? [] : createPiProjectTools(
              options.cwd,
-	     options.readOnly ?? false
+	     options.readOnly ?? false,
+             options.allowProjectChecks !== false
 	),
 
         thinkingLevel: "off",
@@ -186,9 +191,17 @@ export class PiRuntime implements AgentRuntime {
       prompt,
     ].join("\n");
 
-    await session.prompt(
-      finalPrompt
-    );
+    const signal = AbortSignal.any([AbortSignal.timeout(600_000), ...(options.signal ? [options.signal] : [])]);
+    const abort = () => { void session.abort(); };
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      signal.throwIfAborted();
+      await session.prompt(finalPrompt);
+      signal.throwIfAborted();
+    } finally {
+      signal.removeEventListener("abort", abort);
+      session.dispose();
+    }
 
     const text =
       this.extractAgentText(
@@ -212,7 +225,7 @@ export class PiRuntime implements AgentRuntime {
         ? "Modo: somente leitura."
         : [
             "Modo solicitado: escrita no workspace.",
-            "As ferramentas de escrita ainda estão desabilitadas nesta versão do PiRuntime.",
+            "Use apenas as ferramentas autorizadas de edição dentro do workspace.",
           ].join(" "),
     ].join("\n");
   }

@@ -1,3 +1,4 @@
+import { TaskManager } from "../core/TaskManager.js";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -466,6 +467,9 @@ async function main() {
     // POST /projects/:id/jobs + GET /jobs/:jobId (+ logs)
     // -------------------------------------------------------
 
+    const missingPlan = await fetch(`${baseUrl}/projects/${projectId}/jobs`, { method: "POST" });
+    if (missingPlan.status !== 409) throw new Error("Job sem plano deve ser bloqueado.");
+    await new TaskManager().savePlan({ projectId, objective: "Fixture de teste", tasks: [{ id: "fixture-task", agent: "architect", task: "Analisar", dependsOn: [] }] });
     const jobResponse = await fetch(
       `${baseUrl}/projects/${projectId}/jobs`,
       { method: "POST" }

@@ -1,0 +1,72 @@
+# Domains/Traefik and the isolated network are injected by Dokploy.
+# No container_name, published ports, fixed network or global volume names.
+services:
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      NODE_ENV: production
+      SENIOR_GATEWAY_HOST: 0.0.0.0
+      SENIOR_GATEWAY_TOKEN: ${SENIOR_GATEWAY_TOKEN:?Configure o token}
+      SENIOR_AGENT_RUNTIME: ${SENIOR_AGENT_RUNTIME:-openai}
+      SENIOR_ENABLE_CODE_EXECUTION: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      SENIOR_OPENAI_MODEL: ${SENIOR_OPENAI_MODEL:-}
+      SENIOR_ANTHROPIC_MODEL: ${SENIOR_ANTHROPIC_MODEL:-}
+      SENIOR_XAI_MODEL: ${SENIOR_XAI_MODEL:-}
+      SENIOR_MAX_RUNS_PER_HOUR: ${SENIOR_MAX_RUNS_PER_HOUR:-20}
+      SENIOR_BACKUP_KEEP: ${SENIOR_BACKUP_KEEP:-14}
+    expose: ["4000"]
+    volumes:
+      - senior-data:/app/data
+      - senior-projects:/app/projects
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+  web:
+    build:
+      context: .
+      target: web
+    environment:
+      NODE_ENV: production
+      SENIOR_PUBLIC_URL: https://${SENIOR_DOMAIN:?Configure o domínio}
+      SENIOR_API_URL: http://api:4000
+      SENIOR_GATEWAY_TOKEN: ${SENIOR_GATEWAY_TOKEN:?Configure o token}
+      SENIOR_WEB_PASSWORD: ${SENIOR_WEB_PASSWORD:?Configure a senha}
+      SENIOR_SESSION_SECRET: ${SENIOR_SESSION_SECRET:?Configure o segredo de sessão}
+      SENIOR_COOKIE_SECURE: "true"
+      SENIOR_TRUST_PROXY: ${SENIOR_TRUST_PROXY:-true}
+      SENIOR_TRUSTED_PROXY_HOPS: ${SENIOR_TRUSTED_PROXY_HOPS:-1}
+    expose: ["3000"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/auth').then(async r=>{const b=await r.json();process.exit(r.ok&&b.configured?0:1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+volumes:
+  senior-data:
+  senior-projects:
